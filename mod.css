@@ -64,7 +64,7 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
 
 /* ========= 窗口标题栏&按钮 ========= */
 
-/* ## DefStyle ## */
+/* ## 类 Windows 样式 ## */
 
 /* .trim-ui__app-layout--window {
     border-radius: 28px !important;
@@ -95,7 +95,7 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
 } */
 
-/* ## MacStyle ## */
+/* ## 类 macOS 样式 ## */
 
 .trim-ui__app-layout--window {
     border-radius: 38px !important;
