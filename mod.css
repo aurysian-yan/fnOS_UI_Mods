@@ -8,6 +8,10 @@
     border: var(--semi-color-divider-1) 1px solid;
     box-sizing: border-box;
     corner-shape: superellipse(1.25);
+
+    .bg-\[var\(--semi-color-app-container\)\] {
+        background-color: var(--semi-color-app-container) !important;
+    }
 }
 
 .bg-\[var\(--semi-color-app-container\)\] .h-extra-loose.box-border.border-t.border-solid.border-divider-1.px-4 {
