@@ -231,7 +231,7 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     border-radius: 24px !important;
     corner-shape: superellipse(2);
     backdrop-filter: blur(20px) !important;
-    
+
     .bg-\[var\(--semi-color-bg-0\)\] {
         background-color: transparent;
     }
@@ -329,7 +329,8 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     background-size: cover;
 }
 
-.semi-image.size-full:has(img[alt="全部应用"]) img, .semi-image.size-full:has(img[alt="桌面"]) img {
+.semi-image.size-full:has(img[alt="全部应用"]) img,
+.semi-image.size-full:has(img[alt="桌面"]) img {
     display: none;
 }
 
@@ -341,8 +342,9 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
 .relative.flex.flex-1.flex-col:has(.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10) .scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2 {
     height: fit-content;
     position: relative;
+    padding-top: 7px !important;
+    padding-bottom: 11px;
 }
-
 
 .box-border.size-full.py-4.pl-3\.5:has(.h-full.rounded-md.border.border-\[rgba\(255\,255\,255\,0\.20\)\].bg-\[var\(--semi-color-fndesktop-navbarBg\)\].backdrop-blur-\[20px\]) {
     display: flex;
@@ -359,7 +361,7 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     mask-size: 44px;
 }
 
-.h-full.rounded-md.border.border-\[rgba\(255\,255\,255\,0\.20\)\].bg-\[var\(--semi-color-fndesktop-navbarBg\)\].backdrop-blur-\[20px\] .box-border.flex.h-full.flex-col.py-3{
+.h-full.rounded-md.border.border-\[rgba\(255\,255\,255\,0\.20\)\].bg-\[var\(--semi-color-fndesktop-navbarBg\)\].backdrop-blur-\[20px\] .box-border.flex.h-full.flex-col.py-3 {
     padding-top: 4px !important;
     padding-bottom: 14px !important;
 }
@@ -367,11 +369,43 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
 .h-full.rounded-md.border.border-\[rgba\(255\,255\,255\,0\.20\)\].bg-\[var\(--semi-color-fndesktop-navbarBg\)\].backdrop-blur-\[20px\] {
     border-radius: 128px !important;
     corner-shape: superellipse(1.75);
+    height: fit-content;
 }
 
 .h-full.rounded-md.border.border-\[rgba\(255\,255\,255\,0\.20\)\].bg-\[var\(--semi-color-fndesktop-navbarBg\)\].backdrop-blur-\[20px\] .pb-\[7px\] {
     padding-bottom: 0 !important;
     border: none !important;
+}
+
+.scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2 {
+    position: relative;
+    min-height: 128px;
+}
+
+.relative.flex.flex-1.flex-col:has(.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10) .scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2::before,
+.relative.flex.flex-1.flex-col:has(.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10) .scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2::after {
+    content: '';
+    width: calc(100% - 18px);
+    height: 1px;
+    background: var(--semi-color-border);
+    margin: 0 auto;
+}
+
+.relative.flex.flex-1.flex-col:has(.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10) .scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2::after {
+    position: absolute;
+    bottom: 10px;
+    left: 9px;
+}
+
+.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10.bg-white-10.\!border-focus-border::before {
+    content: '';
+    position: absolute;
+    height: 4px;
+    width: 4px;
+    background: var(--semi-color-text-2);
+    left: 6px;
+    border-radius: 999px;
+    margin-top: -1px;
 }
 
 /* ========= 浅色模式补丁 ========= */
@@ -390,7 +424,7 @@ body:not([theme-mode="dark"]) {
             color: color-mix(in srgb, var(--semi-color-white) 60%, transparent);
         }
     }
-    
+
     .min-w-\[6\.875rem\].rounded-lg.border.border-solid.border-\[var\(--semi-color-border-select\)\].bg-\[var\(--semi-color-bg-dropdown\)\].py-1.text-\[var\(--semi-color-text-0\)\].shadow-dropdown.left-\[105\%\].right-auto {
         background: color-mix(in srgb, var(--semi-color-bg-dropdown) 60%, transparent);
     }
