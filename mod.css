@@ -1,3 +1,8 @@
+/* * {
+    font-family: "Inter Variable", "Inter", "SF Pro", "OPPO Sans 4.0", MiSans, "MiSans VF", "MiSans";
+    font-weight: 400 !important;
+} */
+
 .bg-\[var\(--semi-color-app-container\)\] {
     background-color: var(--semi-color-fndesktop-navbarBg) !important;
     border: var(--semi-color-divider-1) 1px solid;
@@ -63,6 +68,10 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
 }
 
 /* ========= 窗口标题栏&按钮 ========= */
+
+.trim-ui__app-layout--header {
+    cursor: default;
+}
 
 /* ## 类 Windows 样式 ## */
 
@@ -212,11 +221,17 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     filter: drop-shadow(0 2px 15.1px 0 rgba(0, 0, 0, 0.40)) !important;
 }
 
+.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 {
+    width: 48px !important;
+    height: 48px !important;
+    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
+}
+
 .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4:hover {
     transform: translateY(-6px);
     gap: .9rem;
 
-    > div:first-of-type {
+    >div:first-of-type {
         transform: rotate(6deg);
     }
 }
@@ -414,7 +429,37 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     background: var(--semi-color-text-2);
     left: 6px;
     border-radius: 999px;
-    margin-top: -1px;
+}
+
+/* 启动台 */
+
+.flex.flex-col.justify-start.items-center.pl-\[280px\].pr-\[216px\].py-\[64px\].h-full.box-border {
+    padding-left: calc(54px + .875rem);
+    padding-right: 0;
+}
+
+.semi-input-wrapper,
+.semi-input-wrapper:hover,
+.semi-input-wrapper.w-full.\!h-\[44px\].rounded-\[8px\].border.border-solid.box-border.py-\[5px\].px-\[10px\].placeholder\:text-white-50.\!bg-white-10.\!text-base.font-normal.leading-\[22px\].\!text-white.\!border-white-20.semi-input-wrapper__with-prefix.semi-input-wrapper-default,
+.semi-input-wrapper.w-full.\!h-\[44px\].rounded-\[8px\].border.border-solid.box-border.py-\[5px\].px-\[10px\].placeholder\:text-white-50.\!bg-white-10.\!text-base.font-normal.leading-\[22px\].\!text-white.\!border-white-20.semi-input-wrapper__with-prefix.semi-input-wrapper-default:hover {
+    width: 100%;
+    border-radius: 999px !important;
+    padding: 12px 16px;
+}
+
+.w-\[380px\].pb-base-loose {
+    width: 75% !important;
+    max-width: 348px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.semi-input-wrapper>div>svg,
+.semi-input-wrapper>div>svg:hover,
+.semi-input-wrapper.w-full.\!h-\[44px\].rounded-\[8px\].border.border-solid.box-border.py-\[5px\].px-\[10px\].placeholder\:text-white-50.\!bg-white-10.\!text-base.font-normal.leading-\[22px\].\!text-white.\!border-white-20.semi-input-wrapper__with-prefix.semi-input-wrapper-default>div>svg {
+    height: 16px;
+    width: 16px;
 }
 
 /* ========= 浅色模式补丁 ========= */
@@ -439,6 +484,7 @@ body:not([theme-mode="dark"]) {
     }
 
     .h-full.rounded-md.border.border-\[rgba\(255\,255\,255\,0\.20\)\].bg-\[var\(--semi-color-fndesktop-navbarBg\)\].backdrop-blur-\[20px\] {
+
         .flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10.bg-white-10.\!border-focus-border::before,
         .relative.flex.flex-1.flex-col:has(.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10)::before,
         .relative.flex.flex-1.flex-col:has(.flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10)::after {
