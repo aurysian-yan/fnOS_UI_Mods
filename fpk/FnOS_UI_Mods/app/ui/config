@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "FnOS_UI_Mods.Application": {
+            "title": "FnOS_UI_Mods",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "protocol": "",
+            "port": "8080",
+            "url": "/",
+            "allUsers": false
+        }
+    }
+}

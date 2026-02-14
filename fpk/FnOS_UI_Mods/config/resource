@@ -1,0 +1,28 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "FnOS_UI_Mods",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "FnOS_UI_Mods"
+                    ]
+                }
+            },
+            {
+                "name": "FnOS_UI_Mods/data",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "FnOS_UI_Mods"
+                    ]
+                }
+            }
+        ]
+    }
+}
