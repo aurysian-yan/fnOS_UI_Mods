@@ -1,7 +1,7 @@
 {
     ".url": {
         "FnOS_UI_Mods.Application": {
-            "title": "FnOS UI 注入工具",
+            "title": "飞牛自定义工具",
             "icon": "images/icon_{0}.png",
             "type": "iframe",
             "protocol": "",

@@ -111,6 +111,19 @@
       </div>
     </section>
 
+    <section class="panel">
+      <div class="panel-head">
+        <h2>注入延时</h2>
+        <p>注入前先还原官方默认，再等待一段时间，模拟手动输入路径的间隔。</p>
+      </div>
+      <div class="form-grid">
+        <label class="field">
+          <span>注入前等待（秒）</span>
+          <input id="inject-delay" type="number" min="0" max="120" value="5" />
+        </label>
+      </div>
+    </section>
+
     <section class="panel actions">
       <div class="action-buttons">
         <button id="inject-btn" class="primary">执行注入</button>

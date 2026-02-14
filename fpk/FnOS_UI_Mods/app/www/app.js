@@ -15,6 +15,13 @@ const cssTextArea = document.getElementById('css-text');
 const jsTextArea = document.getElementById('js-text');
 const cssPathInput = document.getElementById('css-path');
 const jsPathInput = document.getElementById('js-path');
+const injectDelayInput = document.getElementById('inject-delay');
+const DEFAULT_INJECT_DELAY = 5;
+
+function apiUrl(path) {
+  const cleanPath = path.replace(/^\/+/, '');
+  return new URL(cleanPath, window.location.href).toString();
+}
 
 function setMessage(text, type = '') {
   messageEl.textContent = text;
@@ -32,7 +39,7 @@ function formatTime(iso) {
 
 async function loadStatus() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch(apiUrl('api/status'));
     const data = await res.json();
     if (!data.ok) throw new Error(data.message || '状态读取失败');
 
@@ -139,7 +146,24 @@ async function handleInject() {
       getPayloadForSection(jsMode, jsFileInput, jsTextArea, jsPathInput, 'JS'),
     ]);
 
-    const res = await fetch('/api/inject', {
+    const delayRaw = injectDelayInput ? injectDelayInput.value.trim() : '';
+    const injectDelaySec = delayRaw ? Number(delayRaw) : DEFAULT_INJECT_DELAY;
+
+    if (!Number.isFinite(injectDelaySec) || injectDelaySec < 0 || injectDelaySec > 120) {
+      throw new Error('注入延时无效 (0-120 秒)');
+    }
+
+    console.log('[FnOS UI Mods] inject payload', {
+      cssMode,
+      jsMode,
+      cssTextLength: cssPayload.text ? cssPayload.text.length : 0,
+      jsTextLength: jsPayload.text ? jsPayload.text.length : 0,
+      cssPath: cssPayload.path || '',
+      jsPath: jsPayload.path || '',
+      injectDelaySec,
+    });
+
+    const res = await fetch(apiUrl('api/inject'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -147,10 +171,12 @@ async function handleInject() {
         jsText: jsPayload.text || '',
         cssPath: cssPayload.path || '',
         jsPath: jsPayload.path || '',
+        injectDelaySec,
       }),
     });
 
     const data = await res.json();
+    console.log('[FnOS UI Mods] inject response', data);
     if (!data.ok) throw new Error(data.message || '注入失败');
 
     setMessage(data.message || '注入成功', 'ok');
@@ -172,7 +198,7 @@ async function handleRestore() {
   restoreBtn.disabled = true;
 
   try {
-    const res = await fetch('/api/restore', { method: 'POST' });
+    const res = await fetch(apiUrl('api/restore'), { method: 'POST' });
     const data = await res.json();
     if (!data.ok) throw new Error(data.message || '还原失败');
     setMessage(data.message || '还原完成', 'ok');

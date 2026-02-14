@@ -7,7 +7,7 @@ const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const url = require('url');
-const readline = require('readline');
+const { spawn } = require('child_process');
 
 const APP_DEST = process.env.TRIM_APPDEST || path.resolve(__dirname, '..');
 const WWW_ROOT = path.join(APP_DEST, 'www');
@@ -18,6 +18,162 @@ const INDEX_FILE = path.join(TARGET_DIR, 'index.html');
 const BACKUP_DIR = '/usr/cqshbak';
 const BACKUP_FILE = path.join(BACKUP_DIR, 'index.html.original');
 const LOG_FILE = process.env.TRIM_PKGVAR ? path.join(process.env.TRIM_PKGVAR, 'info.log') : null;
+const TEMP_DIR = process.env.TRIM_PKGVAR ? path.join(process.env.TRIM_PKGVAR, 'tmp') : os.tmpdir();
+const SHELL_INJECT_SCRIPT = path.join(APP_DEST, 'server', 'inject_shell.sh');
+const USE_SHELL_INJECT = process.env.FNOS_INJECT_USE_SH !== '0';
+const FORCE_NSENTER = process.env.FNOS_INJECT_NSENTER === '1';
+const DISABLE_NSENTER = process.env.FNOS_INJECT_NSENTER === '0';
+const INJECT_RUNNER = process.env.FNOS_INJECT_RUNNER || 'auto'; // auto|direct|nsenter|at
+const ENABLE_GUARD = process.env.FNOS_INJECT_GUARD === '1';
+const STABILIZE_INTERVAL_MS = 2000;
+const STABILIZE_MAX_MS = 30000;
+const STABLE_REQUIRED = 3;
+let lastPayload = { css: null, js: null };
+let stabilizeTimer = null;
+let stabilizeState = null;
+let nsenterChecked = false;
+let nsenterAvailable = false;
+let mntSelf = null;
+let mntInit = null;
+let atAvailable = false;
+
+function detectNamespace() {
+  try {
+    mntSelf = fs.readlinkSync('/proc/self/ns/mnt');
+  } catch (_) {
+    mntSelf = null;
+  }
+  try {
+    mntInit = fs.readlinkSync('/proc/1/ns/mnt');
+  } catch (_) {
+    mntInit = null;
+  }
+}
+
+function detectNsenter() {
+  if (nsenterChecked) return;
+  nsenterChecked = true;
+  try {
+    fs.accessSync('/usr/bin/nsenter', fs.constants.X_OK);
+    nsenterAvailable = true;
+    return;
+  } catch (_) {
+    // fallthrough
+  }
+  try {
+    fs.accessSync('/bin/nsenter', fs.constants.X_OK);
+    nsenterAvailable = true;
+  } catch (_) {
+    nsenterAvailable = false;
+  }
+}
+
+function detectAt() {
+  try {
+    fs.accessSync('/usr/bin/at', fs.constants.X_OK);
+    atAvailable = true;
+    return;
+  } catch (_) {
+    // fallthrough
+  }
+  try {
+    fs.accessSync('/bin/at', fs.constants.X_OK);
+    atAvailable = true;
+  } catch (_) {
+    atAvailable = false;
+  }
+}
+
+detectNamespace();
+detectNsenter();
+detectAt();
+log(`Namespace mnt: self=${mntSelf || 'unknown'} init=${mntInit || 'unknown'} nsenter=${nsenterAvailable} at=${atAvailable}`);
+
+function shellQuote(value) {
+  if (!value) return "''";
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function selectRunner() {
+  const runner = INJECT_RUNNER.toLowerCase();
+  if (runner === 'direct' || runner === 'nsenter' || runner === 'at') return runner;
+  if (runner === 'auto') {
+    if (atAvailable) return 'at';
+    if (nsenterAvailable && !DISABLE_NSENTER && (FORCE_NSENTER || (mntSelf && mntInit && mntSelf !== mntInit))) {
+      return 'nsenter';
+    }
+    return 'direct';
+  }
+  return 'direct';
+}
+
+async function runAtCommand(command) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('at', ['-M', 'now'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (err) => reject(err));
+    child.on('close', (code) => {
+      if (stdout.trim()) log(`at stdout: ${stdout.trim()}`);
+      if (stderr.trim()) log(`at stderr: ${stderr.trim()}`);
+      if (code === 0) return resolve();
+      return reject(new Error(`at failed with code ${code}`));
+    });
+    child.stdin.write(`${command}\n`);
+    child.stdin.end();
+  });
+}
+
+async function writeTempFile(ext, content) {
+  await fsp.mkdir(TEMP_DIR, { recursive: true }).catch(() => {});
+  const tempFile = path.join(TEMP_DIR, `.fnos-ui-mods-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`);
+  await fsp.writeFile(tempFile, content, 'utf8');
+  log(`Temp file created: ${tempFile}`);
+  return tempFile;
+}
+
+async function runShellInject(cssPath, jsPath, delaySec = 0) {
+  return new Promise((resolve, reject) => {
+    const runner = selectRunner();
+    const delayArg = delaySec > 0 ? String(delaySec) : '';
+    const baseArgs = [SHELL_INJECT_SCRIPT, cssPath || '', jsPath || '', delayArg];
+
+    if (runner === 'at') {
+      const command = `bash ${shellQuote(SHELL_INJECT_SCRIPT)} ${shellQuote(cssPath || '')} ${shellQuote(jsPath || '')} ${shellQuote(delayArg)} >> ${shellQuote(LOG_FILE || '/tmp/fnos-ui-mods.log')} 2>&1`;
+      log(`Shell inject (at): ${command}`);
+      runAtCommand(command).then(resolve).catch(reject);
+      return;
+    }
+
+    const useNsenter = runner === 'nsenter';
+    const cmd = useNsenter ? 'nsenter' : 'bash';
+    const args = useNsenter ? ['-t', '1', '-m', '--', 'bash', ...baseArgs] : baseArgs;
+
+    log(`Shell inject (${useNsenter ? 'nsenter' : 'direct'}): ${cmd} ${args.join(' ')}`);
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (err) => reject(err));
+    child.on('close', (code) => {
+      if (stdout.trim()) log(`Shell inject stdout: ${stdout.trim()}`);
+      if (stderr.trim()) log(`Shell inject stderr: ${stderr.trim()}`);
+      if (code === 0) return resolve();
+      return reject(new Error(`Shell inject failed with code ${code}`));
+    });
+  });
+}
 
 function log(msg) {
   const line = `${new Date().toISOString()} ${msg}\n`;
@@ -112,54 +268,159 @@ async function readTextFromPath(filePath) {
   return fsp.readFile(filePath, 'utf8');
 }
 
-async function injectBlock(inputPath, marker, blockLines) {
-  const tempFile = path.join(os.tmpdir(), `fnos-ui-mods-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`);
-  const reader = readline.createInterface({
-    input: fs.createReadStream(inputPath, { encoding: 'utf8' }),
-    crlfDelay: Infinity,
-  });
-  const writer = fs.createWriteStream(tempFile, { encoding: 'utf8' });
-
-  let inserted = false;
-
-  for await (const line of reader) {
-    if (!inserted && line.includes(marker)) {
-      const idx = line.indexOf(marker);
-      const before = line.slice(0, idx);
-      const after = line.slice(idx);
-
-      if (before.length > 0) {
-        writer.write(before + '\n');
-      }
-      writer.write(blockLines.join('\n') + '\n');
-      writer.write(after + '\n');
-
-      inserted = true;
-      continue;
-    }
-
-    writer.write(line + '\n');
+function insertBeforeTag(html, tagRegex, blockLines, label) {
+  const match = html.match(tagRegex);
+  if (!match || typeof match.index !== 'number') {
+    throw new Error(`未找到插入位置: ${label}`);
   }
-
-  await new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
-    reader.on('error', reject);
-    writer.end();
-  });
-
-  if (!inserted) {
-    await fsp.unlink(tempFile).catch(() => {});
-    throw new Error(`未找到插入位置: ${marker}`);
-  }
-
-  await fsp.copyFile(tempFile, inputPath);
-  await fsp.unlink(tempFile).catch(() => {});
+  const insert = `${blockLines.join('\n')}\n`;
+  return html.slice(0, match.index) + insert + html.slice(match.index);
 }
 
-async function injectCode({ cssText, jsText, cssPath, jsPath }) {
-  await ensureBackup();
-  await fsp.copyFile(BACKUP_FILE, INDEX_FILE);
+function buildInjectedHtml(html, finalCss, finalJs) {
+  let next = html;
+  if (finalCss) {
+    next = insertBeforeTag(next, /<\/\s*head\s*>/i, [
+      '<style>',
+      '/* Injected CSS */',
+      finalCss,
+      '</style>',
+    ], '</head>');
+  }
+  if (finalJs) {
+    next = insertBeforeTag(next, /<\/\s*body\s*>/i, [
+      '<script>',
+      '// Injected JS',
+      finalJs,
+      '</script>',
+    ], '</body>');
+  }
+  return next;
+}
+
+async function writeIndexHtml(html) {
+  const tempFile = path.join(TARGET_DIR, `.fnos-ui-mods-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`);
+  let originalStat = null;
+  try {
+    originalStat = await fsp.stat(INDEX_FILE);
+  } catch (_) {
+    originalStat = null;
+  }
+
+  await fsp.writeFile(tempFile, html, 'utf8');
+  if (originalStat) {
+    await fsp.chown(tempFile, originalStat.uid, originalStat.gid).catch(() => {});
+  }
+  await fsp.rename(tempFile, INDEX_FILE);
+  if (originalStat) {
+    await fsp.chmod(INDEX_FILE, originalStat.mode).catch(() => {});
+  } else {
+    await fsp.chmod(INDEX_FILE, 0o644).catch(() => {});
+  }
+
+  let readbackCss = false;
+  let readbackJs = false;
+  try {
+    const verify = await fsp.readFile(INDEX_FILE, 'utf8');
+    readbackCss = verify.includes('/* Injected CSS */');
+    readbackJs = verify.includes('// Injected JS');
+  } catch (err) {
+    log(`Inject readback failed: ${err.message}`);
+  }
+
+  return {
+    readbackCss,
+    readbackJs,
+    size: Buffer.byteLength(html),
+  };
+}
+
+async function performInjection(finalCss, finalJs, { restoreFromBackup, logPrefix }) {
+  if (restoreFromBackup) {
+    await ensureBackup();
+    await fsp.copyFile(BACKUP_FILE, INDEX_FILE);
+  }
+
+  let html = await fsp.readFile(INDEX_FILE, 'utf8');
+  const hasHead = /<\/\s*head\s*>/i.test(html);
+  const hasBody = /<\/\s*body\s*>/i.test(html);
+  log(`${logPrefix} target markers: </head> ${hasHead ? 'found' : 'missing'}, </body> ${hasBody ? 'found' : 'missing'}`);
+
+  html = buildInjectedHtml(html, finalCss, finalJs);
+
+  const cssInserted = html.includes('/* Injected CSS */');
+  const jsInserted = html.includes('// Injected JS');
+  const { readbackCss, readbackJs, size } = await writeIndexHtml(html);
+
+  log(`${logPrefix} result: css=${cssInserted}, js=${jsInserted}, readback css=${readbackCss}, readback js=${readbackJs}, size=${size} bytes`);
+  return { cssInserted, jsInserted, readbackCss, readbackJs };
+}
+
+function clearStabilizeGuard() {
+  if (!stabilizeTimer) return;
+  clearInterval(stabilizeTimer);
+  stabilizeTimer = null;
+  stabilizeState = null;
+}
+
+function startStabilizeGuard() {
+  clearStabilizeGuard();
+  if (!lastPayload.css && !lastPayload.js) return;
+
+  stabilizeState = {
+    startAt: Date.now(),
+    stableCount: 0,
+    tick: 0,
+  };
+
+  log('Stabilize guard started');
+  stabilizeTimer = setInterval(async () => {
+    if (!stabilizeState) return;
+
+    stabilizeState.tick += 1;
+    const elapsed = Date.now() - stabilizeState.startAt;
+    if (elapsed > STABILIZE_MAX_MS) {
+      log('Stabilize guard finished (timeout)');
+      clearStabilizeGuard();
+      return;
+    }
+
+    try {
+      const verify = await fsp.readFile(INDEX_FILE, 'utf8');
+      const cssPresent = verify.includes('/* Injected CSS */');
+      const jsPresent = verify.includes('// Injected JS');
+      const needsCss = lastPayload.css && !cssPresent;
+      const needsJs = lastPayload.js && !jsPresent;
+
+      if (needsCss || needsJs) {
+        stabilizeState.stableCount = 0;
+        log(`Stabilize tick ${stabilizeState.tick}: missing markers (css=${cssPresent}, js=${jsPresent}), reapplying...`);
+        const cssToApply = needsCss ? lastPayload.css : null;
+        const jsToApply = needsJs ? lastPayload.js : null;
+        await performInjection(cssToApply, jsToApply, {
+          restoreFromBackup: false,
+          logPrefix: `Stabilize reapply ${stabilizeState.tick}`,
+        });
+        return;
+      }
+
+      stabilizeState.stableCount += 1;
+      log(`Stabilize tick ${stabilizeState.tick}: markers present (css=${cssPresent}, js=${jsPresent}), stable=${stabilizeState.stableCount}`);
+      if (stabilizeState.stableCount >= STABLE_REQUIRED) {
+        log('Stabilize guard finished (stable)');
+        clearStabilizeGuard();
+      }
+    } catch (err) {
+      log(`Stabilize tick ${stabilizeState.tick} failed: ${err.message}`);
+    }
+  }, STABILIZE_INTERVAL_MS);
+}
+
+async function injectCode({ cssText, jsText, cssPath, jsPath, injectDelaySec }) {
+  const delaySec = Number.isFinite(Number(injectDelaySec)) ? Number(injectDelaySec) : 0;
+  log(
+    `Inject request: cssText=${cssText ? cssText.length : 0} chars, jsText=${jsText ? jsText.length : 0} chars, cssPath=${cssPath || '-'}, jsPath=${jsPath || '-'}, delay=${delaySec}s`,
+  );
 
   let finalCss = null;
   let finalJs = null;
@@ -177,28 +438,42 @@ async function injectCode({ cssText, jsText, cssPath, jsPath }) {
   }
 
   if (!finalCss && !finalJs) {
+    log('Inject aborted: no css/js provided');
     return { injected: false, message: '未提供任何 CSS/JS 内容' };
   }
 
-  if (finalCss) {
-    await injectBlock(INDEX_FILE, '</head>', [
-      '<style>',
-      '/* Injected CSS */',
-      finalCss,
-      '</style>',
-    ]);
+  lastPayload = { css: finalCss, js: finalJs };
+
+  if (USE_SHELL_INJECT) {
+    let cssTemp = '';
+    let jsTemp = '';
+    try {
+      const cssInputPath = cssPath || (finalCss ? await writeTempFile('.css', finalCss) : '');
+      const jsInputPath = jsPath || (finalJs ? await writeTempFile('.js', finalJs) : '');
+      cssTemp = cssPath ? '' : cssInputPath;
+      jsTemp = jsPath ? '' : jsInputPath;
+      await runShellInject(cssInputPath, jsInputPath, delaySec);
+    } finally {
+      if (cssTemp) {
+        await fsp.unlink(cssTemp).catch(() => {});
+      }
+      if (jsTemp) {
+        await fsp.unlink(jsTemp).catch(() => {});
+      }
+    }
+  } else {
+    if (delaySec > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delaySec * 1000));
+    }
+    await performInjection(finalCss, finalJs, {
+      restoreFromBackup: true,
+      logPrefix: 'Inject',
+    });
   }
 
-  if (finalJs) {
-    await injectBlock(INDEX_FILE, '</body>', [
-      '<script>',
-      '// Injected JS',
-      finalJs,
-      '</script>',
-    ]);
+  if (ENABLE_GUARD) {
+    startStabilizeGuard();
   }
-
-  await fsp.chmod(INDEX_FILE, 0o644);
   return { injected: true, message: '注入成功，请强制刷新浏览器 (Ctrl+F5) 查看效果。' };
 }
 
@@ -319,12 +594,14 @@ const server = http.createServer(async (req, res) => {
         const jsText = typeof body.jsText === 'string' ? body.jsText.trim() : '';
         const cssPath = typeof body.cssPath === 'string' ? body.cssPath.trim() : '';
         const jsPath = typeof body.jsPath === 'string' ? body.jsPath.trim() : '';
+        const injectDelaySec = body && typeof body.injectDelaySec !== 'undefined' ? body.injectDelaySec : 0;
 
         const result = await injectCode({
           cssText: cssText || null,
           jsText: jsText || null,
           cssPath: cssPath || null,
           jsPath: jsPath || null,
+          injectDelaySec,
         });
 
         if (!result.injected) {
