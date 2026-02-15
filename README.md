@@ -19,9 +19,25 @@
 
 ## 使用方法：
 1. 拉取源代码
-2. 将文件存放到 NAS 内，并使用 SSH 连接到 NAS
-3. 在终端内执行`inject_fnos.sh`，进行 CSS 与 JS 的注入
-4. 刷新 WebUI 页面
+   
+<details>
+  <summary>- 使用 SSH 终端注入</summary>
+  
+  2. 将文件存放到 NAS 内
+  3. 使用 SSH 连接到 NAS
+  4. 在终端内执行`inject_fnos.sh`，进行 CSS 与 JS 的注入
+  5. 刷新 WebUI 页面
+
+</details>
+
+<details>
+  <summary>- 使用 FPK 应用注入</summary>
+  
+  2. 在应用中心内手动安装 FPK 安装包
+  3. 打开“飞牛自定义工具”，选择文件并注入
+  4. 刷新 WebUI 页面
+
+</details>
 
 ## 请注意：
 本项目是对官方 WebUI HTML 文件的补丁项目，其原理为：动态向官方 WebUI 的 HTML head 部分插入自定义 patch 内容，用以增强 UI 层级显示和用户自定义功能。本项目可能依赖或受 WebUI 官方版本更新影响，如官方结构调整，本补丁可能无法正常工作或出现兼容性问题。不对补丁在未来版本中的可用性、兼容性或迁移支持做出任何保证。
