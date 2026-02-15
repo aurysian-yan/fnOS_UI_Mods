@@ -26,8 +26,6 @@
    - 想自动覆盖局域网地址时：保持“自动对内网 IP 启用”勾选。
 5. 刷新 WebUI 页面即可生效。
 
-> 插件图标路径已在 `manifest.json` 中预留为 `browser-extension/icons/icon16.png`、`icon32.png`、`icon48.png`、`icon128.png`，你补齐对应文件后重新加载扩展即可。
-
 > 如果后续你更新了根目录的 `mod.css` / `mod.js`，请同步覆盖 `browser-extension/mod.css` / `browser-extension/mod.js`，然后在扩展管理页点“重新加载”。
 
 ### 可选项
