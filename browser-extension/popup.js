@@ -1,6 +1,6 @@
 (async () => {
   const originEl = document.getElementById('origin');
-  const toggleBtn = document.getElementById('toggle');
+  const siteToggleEl = document.getElementById('siteToggle');
   const autoPrivateEl = document.getElementById('autoPrivate');
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -9,8 +9,8 @@
 
   if (!origin || !/^https?:$/.test(pageUrl.protocol)) {
     originEl.textContent = '当前页不是 http/https 页面';
-    toggleBtn.disabled = true;
-    toggleBtn.textContent = '不可用';
+    siteToggleEl.disabled = true;
+    autoPrivateEl.disabled = true;
     return;
   }
 
@@ -22,18 +22,11 @@
   });
 
   let enabledOrigins = Array.isArray(state.enabledOrigins) ? state.enabledOrigins : [];
-  let enabled = enabledOrigins.includes(origin);
-
-  function renderButton() {
-    toggleBtn.dataset.enabled = String(enabled);
-    toggleBtn.textContent = enabled ? '已对当前站点启用（点击关闭）' : '对当前站点启用';
-  }
-
-  renderButton();
+  siteToggleEl.checked = enabledOrigins.includes(origin);
   autoPrivateEl.checked = Boolean(state.autoEnablePrivateIp);
 
-  toggleBtn.addEventListener('click', async () => {
-    enabled = !enabled;
+  siteToggleEl.addEventListener('change', async () => {
+    const enabled = siteToggleEl.checked;
 
     if (enabled) {
       enabledOrigins = [...new Set([...enabledOrigins, origin])];
@@ -42,7 +35,6 @@
     }
 
     await chrome.storage.sync.set({ enabledOrigins });
-    renderButton();
   });
 
   autoPrivateEl.addEventListener('change', async () => {

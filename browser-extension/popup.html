@@ -5,72 +5,148 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FnOS UI Mods</title>
     <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --text: #222;
+        --muted: #666;
+        --card-bg: #fff;
+        --card-border: #e6e6e6;
+        --tip: #888;
+        --switch-off: #d1d5db;
+        --switch-on: #22c55e;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171717;
+          --text: #f3f4f6;
+          --muted: #9ca3af;
+          --card-bg: #202020;
+          --card-border: #343434;
+          --tip: #8b8b8b;
+          --switch-off: #4b5563;
+          --switch-on: #22c55e;
+        }
+      }
+
       body {
         margin: 0;
-        min-width: 280px;
+        min-width: 300px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         padding: 12px;
-        color: #222;
+        color: var(--text);
+        background: var(--bg);
       }
 
       .card {
-        border: 1px solid #e6e6e6;
-        border-radius: 10px;
-        padding: 10px;
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 12px;
+        background: var(--card-bg);
+      }
+
+      .title {
+        font-size: 13px;
+        font-weight: 600;
       }
 
       .origin {
         margin-top: 6px;
+        margin-bottom: 12px;
         font-size: 12px;
-        color: #666;
+        color: var(--muted);
         word-break: break-all;
       }
 
-      button {
-        width: 100%;
-        margin-top: 10px;
-        height: 34px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 600;
-      }
-
-      button[data-enabled='true'] {
-        background: #d9f7e1;
-        color: #0d7a33;
-      }
-
-      button[data-enabled='false'] {
-        background: #f3f4f6;
-        color: #333;
-      }
-
-      label {
+      .row {
         display: flex;
         align-items: center;
-        gap: 6px;
-        margin-top: 12px;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .label {
         font-size: 12px;
-        color: #444;
+        line-height: 1.35;
+      }
+
+      .switch {
+        position: relative;
+        width: 44px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        border-radius: 999px;
+        background: var(--switch-off);
+        transition: 0.2s ease;
+      }
+
+      .slider::before {
+        content: '';
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        left: 3px;
+        top: 3px;
+        border-radius: 50%;
+        background: #fff;
+        transition: 0.2s ease;
+      }
+
+      .switch input:checked + .slider {
+        background: var(--switch-on);
+      }
+
+      .switch input:checked + .slider::before {
+        transform: translateX(20px);
+      }
+
+      .switch input:disabled + .slider {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
 
       .tip {
-        margin-top: 6px;
+        margin-top: 10px;
         font-size: 11px;
-        color: #888;
+        color: var(--tip);
       }
     </style>
   </head>
   <body>
     <div class="card">
-      <div>当前站点</div>
+      <div class="title">当前站点</div>
       <div id="origin" class="origin">读取中...</div>
-      <button id="toggle" data-enabled="false">读取中...</button>
-      <label>
-        <input id="autoPrivate" type="checkbox" />
-        自动对内网 IP（10/172.16-31/192.168/localhost）启用
-      </label>
+
+      <div class="row">
+        <div class="label">启用当前站点注入</div>
+        <label class="switch">
+          <input id="siteToggle" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="row">
+        <div class="label">自动对内网 IP 启用<br />(10/172.16-31/192.168/localhost)</div>
+        <label class="switch">
+          <input id="autoPrivate" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
       <div class="tip">切换后请刷新当前页面。</div>
     </div>
     <script src="popup.js"></script>
