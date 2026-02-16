@@ -267,31 +267,49 @@
     injectScript();
   }
 
-  function hasAllClasses(element, classes) {
-    return classes.every((name) => element.classList.contains(name));
-  }
-
-  function findDirectChildByClasses(parent, classes) {
-    for (const child of parent.children) {
-      if (hasAllClasses(child, classes)) return child;
-    }
-    return null;
-  }
-
   function hasFnOSSignature() {
-    const body = document.body;
-    if (!body) return false;
+    const hostname = window.location.hostname || '';
+    const domainRegex = /(\.fnnas\.cn)$|(\.fnos\.net)$|(\.5ddd\.com)$|(\.fynas\.net)$/i;
+    const isKnownFnOSDomain = domainRegex.test(hostname);
 
-    const root = Array.from(body.children).find((el) => el.id === 'root');
-    if (!root) return false;
+    let hasFnOSToken = false;
+    try {
+      const cookie = document.cookie || '';
+      hasFnOSToken =
+        cookie.includes('fnos-token') ||
+        cookie.includes('fnos-long-token') ||
+        Boolean(localStorage.getItem('fnos-token')) ||
+        Boolean(localStorage.getItem('fnos-long-token')) ||
+        Boolean(sessionStorage.getItem('fnos-token')) ||
+        Boolean(sessionStorage.getItem('fnos-long-token'));
+    } catch (_error) {
+      hasFnOSToken = false;
+    }
 
-    const rootContainer = findDirectChildByClasses(root, ['flex', 'h-screen', 'w-full', 'relative']);
-    if (!rootContainer) return false;
+    const hasFnOSDomMarkers = Boolean(
+      document.querySelector('fn-app, [data-fn-id]')
+    );
 
-    const backgroundContainer = rootContainer.querySelector(':scope > div.absolute.inset-0.z-0.object-contain');
-    if (!backgroundContainer) return false;
+    const hasAppCgiResource = performance
+      .getEntriesByType('resource')
+      .some((entry) => typeof entry?.name === 'string' && entry.name.includes('/appcgi/'));
 
-    return Boolean(backgroundContainer.querySelector('.semi-image'));
+    const brandHintText = [
+      document.title || '',
+      document.documentElement?.lang || '',
+      document
+        .querySelector('meta[name="application-name"], meta[property="og:site_name"]')
+        ?.getAttribute('content') || ''
+    ].join(' ');
+    const hasBrandText = /飞牛|fnos|fygo/i.test(brandHintText);
+
+    return (
+      isKnownFnOSDomain ||
+      hasFnOSToken ||
+      hasFnOSDomMarkers ||
+      hasAppCgiResource ||
+      hasBrandText
+    );
   }
 
   function waitForFnOSSignature(timeoutMs = 3000) {
