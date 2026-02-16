@@ -67,7 +67,7 @@
     const rootContainer = findDirectChildByClasses(root, ['flex', 'h-screen', 'w-full', 'relative']);
     if (!rootContainer) return false;
 
-    const backgroundContainer = rootContainer.querySelector('div.absolute.inset-0.z-0.object-contain');
+    const backgroundContainer = rootContainer.querySelector(':scope > div.absolute.inset-0.z-0.object-contain');
     if (!backgroundContainer) return false;
 
     return Boolean(backgroundContainer.querySelector('.semi-image'));

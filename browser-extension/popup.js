@@ -41,6 +41,17 @@
     }
   }
 
+  function setBadgeStatus(isFnOSWebUi) {
+    if (isFnOSWebUi) {
+      fnosBadgeTextEl.textContent = '已检测：疑似 fnOS WebUI 页面';
+      fnosBadgeEl.style.background = 'var(--switch-on)';
+      return;
+    }
+
+    fnosBadgeTextEl.textContent = '未检测到疑似 fnOS WebUI 页面';
+    fnosBadgeEl.style.background = '#6b7280';
+  }
+
   if (!origin || !/^https?:$/.test(pageUrl.protocol)) {
     originEl.textContent = '当前页不是 http/https 页面';
     siteToggleEl.disabled = true;
