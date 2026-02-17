@@ -9,8 +9,8 @@
   const FONT_STYLE_ID = 'fnos-ui-mods-font-style';
 
   const THEME_DEFAULT_BRAND = '#0066ff';
-  const BRAND_LIGHTNESS_MIN = 0.2;
-  const BRAND_LIGHTNESS_MAX = 0.8;
+  const BRAND_LIGHTNESS_MIN = 0.3;
+  const BRAND_LIGHTNESS_MAX = 0.7;
 
   const FONT_LOCAL_DATA_KEY = 'customFontDataUrl';
   const FONT_LOCAL_NAME_KEY = 'customFontFileName';

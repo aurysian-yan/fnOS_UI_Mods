@@ -7,6 +7,7 @@
   const styleMacEl = document.getElementById("styleMac");
   const platformGroupEl = document.getElementById("platformGroup");
   const brandColorEl = document.getElementById("brandColor");
+  const resetBrandColorEl = document.getElementById("resetBrandColor");
   const brandColorTextEl = document.getElementById("brandColorText");
   const fontOverrideEnabledEl = document.getElementById("fontOverrideEnabled");
   const fontSettingsEl = document.getElementById("fontSettings");
@@ -25,8 +26,8 @@
   );
 
   const DEFAULT_BRAND_COLOR = "#0066ff";
-  const BRAND_LIGHTNESS_MIN = 0.2;
-  const BRAND_LIGHTNESS_MAX = 0.8;
+  const BRAND_LIGHTNESS_MIN = 0.3;
+  const BRAND_LIGHTNESS_MAX = 0.7;
 
   const DEFAULT_FONT_FACE_NAME = "FnOSCustomFont";
   const FONT_LOCAL_DATA_KEY = "customFontDataUrl";
@@ -581,6 +582,12 @@
 
     brandColorEl.addEventListener("input", handlePickerInput);
     brandColorEl.addEventListener("change", handlePickerCommit);
+  }
+
+  if (resetBrandColorEl) {
+    resetBrandColorEl.addEventListener("click", async () => {
+      await applyBrandColor(DEFAULT_BRAND_COLOR, true);
+    });
   }
 
   if (brandColorTextEl) {
