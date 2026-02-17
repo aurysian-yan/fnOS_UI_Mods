@@ -29,6 +29,103 @@
 .trim-ui__app-layout--window {
     corner-shape: superellipse(2);
     backdrop-filter: saturate(2) blur(32px) !important;
+    transform-origin: center top;
+    will-change: transform, opacity, filter;
+}
+
+.trim-ui__app-layout--window.fnos-window--enter {
+    animation: fnos-window-enter 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.trim-ui__app-layout--window.fnos-window--exit {
+    pointer-events: none;
+}
+
+.trim-ui__app-layout--window.fnos-window--exit-close {
+    animation: fnos-window-exit-close 0.3s cubic-bezier(0.3, 0.2, 0.2, 1) both;
+}
+
+.trim-ui__app-layout--window.fnos-window--exit-minimize {
+    animation: fnos-window-exit-minimize 0.45s cubic-bezier(0.3, 0.2, 0.2, 1) both;
+}
+
+.trim-ui__app-layout--window.fnos-window--restore {
+    animation: fnos-window-restore 0.45s cubic-bezier(0.3, 0.2, 0.2, 1) both;
+}
+
+.trim-ui__app-layout--window.fnos-window--exit-minimize,
+.trim-ui__app-layout--window.fnos-window--restore {
+    transform-origin: center center;
+}
+
+@keyframes fnos-window-enter {
+    from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.96);
+        filter: blur(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes fnos-window-exit-close {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(12px) scale(0.95);
+        filter: blur(10px);
+    }
+}
+
+@keyframes fnos-window-exit-minimize {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(var(--fnos-window-minimize-dx, -60vw),
+                var(--fnos-window-minimize-dy, -10vh),
+                0) scale(var(--fnos-window-minimize-scale, 0.16));
+        filter: blur(4px);
+    }
+}
+
+@keyframes fnos-window-restore {
+    from {
+        opacity: 0;
+        transform: translate3d(var(--fnos-window-minimize-dx, -60vw),
+                var(--fnos-window-minimize-dy, -10vh),
+                0) scale(var(--fnos-window-minimize-scale, 0.16));
+        filter: blur(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .trim-ui__app-layout--window.fnos-window--enter,
+    .trim-ui__app-layout--window.fnos-window--exit-close,
+    .trim-ui__app-layout--window.fnos-window--exit-minimize,
+    .trim-ui__app-layout--window.fnos-window--restore {
+        animation: none !important;
+    }
 }
 
 .mb-1.mr-1.flex.w-0.flex-1.flex-col.overflow-auto.rounded-\[12px\].bg-\[var\(--semi-color-app-container\)\] {
@@ -217,7 +314,8 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     width: 100%;
 }
 
-.ms-container.max-h-\[inherit\].\!overflow-visible>.relative, .ms-container.max-h-\[inherit\].\!overflow-visible>.relative>div {
+.ms-container.max-h-\[inherit\].\!overflow-visible>.relative,
+.ms-container.max-h-\[inherit\].\!overflow-visible>.relative>div {
     width: 100%;
 }
 
