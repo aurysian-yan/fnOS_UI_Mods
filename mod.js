@@ -728,11 +728,357 @@ function setupAppWindowAnimations() {
     observeWindowCreation();
 }
 
+function setupTaskbarItemAnimations() {
+    if (window._fnosTaskbarAnimationInitialized) return;
+    window._fnosTaskbarAnimationInitialized = true;
+
+    const TASKBAR_ROOT_SELECTOR = '.h-screen.fixed.left-0';
+    const TASKBAR_ITEM_SELECTOR =
+        '.flex.h-10.w-\\[47px\\].items-center.justify-center.gap-x-2.border-0.\\!border-l-\\[3px\\].border-solid.border-transparent.hover\\:bg-white-10';
+    const ENTER_CLASS = 'fnos-taskbar-item--enter';
+    const EXIT_GHOST_CLASS = 'fnos-taskbar-item--exit-ghost';
+    const TASKBAR_LIST_SELECTOR =
+        '.scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2';
+    const ENTER_DURATION_MS = 320;
+    const EXIT_DURATION_MS = 260;
+    const LIST_RESIZE_DURATION_MS = 260;
+    const trackedEntries = new WeakSet();
+    const knownEntryRects = new WeakMap();
+    const knownListHeights = new WeakMap();
+    const listResizeTimers = new Map();
+    const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let bodyObserver = null;
+    let listObserver = null;
+    let currentTaskbarRoot = null;
+    let currentTaskbarList = null;
+    let snapshotScheduled = false;
+
+    function shouldReduceMotion() {
+        return !!reduceMotionQuery && reduceMotionQuery.matches;
+    }
+
+    function isTaskbarAppItem(el) {
+        if (!(el instanceof HTMLElement)) return false;
+        const icon = el.querySelector('img');
+        if (!(icon instanceof HTMLImageElement)) return false;
+        const src = (icon.getAttribute('src') || icon.getAttribute('data-src') || '').toLowerCase();
+        return src.includes('/static/app/icons/') || src.includes('/app-center-static/serviceicon/');
+    }
+
+    function collectTaskbarItems(node) {
+        if (!(node instanceof Element)) return [];
+
+        const items = [];
+        if (node.matches(TASKBAR_ITEM_SELECTOR) && isTaskbarAppItem(node)) {
+            items.push(node);
+        }
+
+        node.querySelectorAll(TASKBAR_ITEM_SELECTOR).forEach((candidate) => {
+            if (!(candidate instanceof HTMLElement)) return;
+            if (!isTaskbarAppItem(candidate)) return;
+            items.push(candidate);
+        });
+
+        return items;
+    }
+
+    function snapshotEntryRect(entryEl) {
+        if (!(entryEl instanceof HTMLElement)) return;
+        const rect = entryEl.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        knownEntryRects.set(entryEl, {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        });
+    }
+
+    function snapshotVisibleEntryRects() {
+        if (!(currentTaskbarList instanceof HTMLElement)) return;
+
+        currentTaskbarList.querySelectorAll(TASKBAR_ITEM_SELECTOR).forEach((entryEl) => {
+            if (!(entryEl instanceof HTMLElement)) return;
+            if (!isTaskbarAppItem(entryEl)) return;
+            trackedEntries.add(entryEl);
+            snapshotEntryRect(entryEl);
+        });
+    }
+
+    function snapshotListHeight(listEl) {
+        if (!(listEl instanceof HTMLElement)) return;
+        const rect = listEl.getBoundingClientRect();
+        if (rect.height <= 0) return;
+        knownListHeights.set(listEl, rect.height);
+    }
+
+    function scheduleSnapshot() {
+        if (snapshotScheduled) return;
+        snapshotScheduled = true;
+
+        window.requestAnimationFrame(() => {
+            snapshotScheduled = false;
+            snapshotVisibleEntryRects();
+            if (currentTaskbarList instanceof HTMLElement) {
+                snapshotListHeight(currentTaskbarList);
+            }
+        });
+    }
+
+    function animateTaskbarListResize(listEl) {
+        if (!(listEl instanceof HTMLElement)) return;
+        const previousHeight = knownListHeights.get(listEl);
+        const existingTimer = listResizeTimers.get(listEl);
+        if (existingTimer) {
+            window.clearTimeout(existingTimer);
+            listResizeTimers.delete(listEl);
+        }
+
+        listEl.style.transition = 'none';
+        listEl.style.overflow = 'hidden';
+        listEl.style.height = 'auto';
+        const nextHeight = listEl.getBoundingClientRect().height;
+        if (!Number.isFinite(previousHeight) || previousHeight <= 0 || nextHeight <= 0) {
+            listEl.style.removeProperty('height');
+            listEl.style.removeProperty('transition');
+            listEl.style.removeProperty('overflow');
+            if (nextHeight > 0) {
+                knownListHeights.set(listEl, nextHeight);
+            }
+            return;
+        }
+        if (Math.abs(nextHeight - previousHeight) < 0.5) {
+            listEl.style.removeProperty('height');
+            listEl.style.removeProperty('transition');
+            listEl.style.removeProperty('overflow');
+            knownListHeights.set(listEl, nextHeight);
+            return;
+        }
+        if (shouldReduceMotion()) {
+            listEl.style.removeProperty('height');
+            listEl.style.removeProperty('transition');
+            listEl.style.removeProperty('overflow');
+            knownListHeights.set(listEl, nextHeight);
+            return;
+        }
+
+        listEl.style.height = `${previousHeight}px`;
+        void listEl.offsetHeight;
+
+        listEl.style.transition = `height ${LIST_RESIZE_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
+        listEl.style.height = `${nextHeight}px`;
+        knownListHeights.set(listEl, nextHeight);
+
+        const timerId = window.setTimeout(() => {
+            if (!listEl.isConnected) return;
+            listEl.style.removeProperty('height');
+            listEl.style.removeProperty('transition');
+            listEl.style.removeProperty('overflow');
+            listResizeTimers.delete(listEl);
+            scheduleSnapshot();
+        }, LIST_RESIZE_DURATION_MS + 40);
+
+        listResizeTimers.set(listEl, timerId);
+    }
+
+    function animateTaskbarItemEnter(entryEl) {
+        if (!(entryEl instanceof HTMLElement)) return;
+        if (trackedEntries.has(entryEl)) return;
+
+        trackedEntries.add(entryEl);
+        snapshotEntryRect(entryEl);
+        if (shouldReduceMotion()) return;
+
+        entryEl.classList.remove(ENTER_CLASS);
+        void entryEl.offsetWidth;
+        entryEl.classList.add(ENTER_CLASS);
+
+        window.setTimeout(() => {
+            if (!entryEl.isConnected) return;
+            entryEl.classList.remove(ENTER_CLASS);
+            snapshotEntryRect(entryEl);
+        }, ENTER_DURATION_MS + 40);
+    }
+
+    function animateTaskbarItemExit(entryEl) {
+        if (!(entryEl instanceof HTMLElement)) return;
+        if (entryEl.isConnected) return;
+        if (shouldReduceMotion()) return;
+        if (!(document.body instanceof HTMLElement)) return;
+
+        const cachedRect = knownEntryRects.get(entryEl);
+        if (!cachedRect || cachedRect.width <= 0 || cachedRect.height <= 0) return;
+
+        const ghost = entryEl.cloneNode(true);
+        if (!(ghost instanceof HTMLElement)) return;
+
+        ghost.classList.remove(ENTER_CLASS);
+        ghost.classList.add(EXIT_GHOST_CLASS);
+        ghost.style.position = 'fixed';
+        ghost.style.left = `${cachedRect.left}px`;
+        ghost.style.top = `${cachedRect.top}px`;
+        ghost.style.width = `${cachedRect.width}px`;
+        ghost.style.height = `${cachedRect.height}px`;
+        ghost.style.margin = '0';
+        ghost.style.zIndex = '2147483646';
+        ghost.style.transformOrigin = 'center center';
+        ghost.style.pointerEvents = 'none';
+        ghost.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(ghost);
+
+        window.setTimeout(() => {
+            ghost.remove();
+        }, EXIT_DURATION_MS + 40);
+    }
+
+    function primeExistingEntries() {
+        if (!(currentTaskbarList instanceof HTMLElement)) return;
+
+        currentTaskbarList.querySelectorAll(TASKBAR_ITEM_SELECTOR).forEach((entryEl) => {
+            if (!(entryEl instanceof HTMLElement)) return;
+            if (!isTaskbarAppItem(entryEl)) return;
+            trackedEntries.add(entryEl);
+            snapshotEntryRect(entryEl);
+        });
+        snapshotListHeight(currentTaskbarList);
+    }
+
+    function handleTaskbarListMutations(mutations) {
+        if (!(currentTaskbarList instanceof HTMLElement)) return;
+        let hasEntryMutation = false;
+
+        mutations.forEach((mutation) => {
+            if (mutation.type !== 'childList') return;
+
+            mutation.removedNodes.forEach((node) => {
+                collectTaskbarItems(node).forEach((entryEl) => {
+                    hasEntryMutation = true;
+                    animateTaskbarItemExit(entryEl);
+                });
+            });
+
+            mutation.addedNodes.forEach((node) => {
+                collectTaskbarItems(node).forEach((entryEl) => {
+                    hasEntryMutation = true;
+                    animateTaskbarItemEnter(entryEl);
+                });
+            });
+        });
+
+        if (!hasEntryMutation) return;
+        animateTaskbarListResize(currentTaskbarList);
+        scheduleSnapshot();
+    }
+
+    function disconnectTaskbarListObserver() {
+        if (listObserver) {
+            listObserver.disconnect();
+            listObserver = null;
+        }
+        if (currentTaskbarList instanceof HTMLElement) {
+            const timerId = listResizeTimers.get(currentTaskbarList);
+            if (timerId) {
+                window.clearTimeout(timerId);
+                listResizeTimers.delete(currentTaskbarList);
+            }
+            currentTaskbarList.style.removeProperty('height');
+            currentTaskbarList.style.removeProperty('transition');
+            currentTaskbarList.style.removeProperty('overflow');
+        }
+        window.removeEventListener('resize', scheduleSnapshot);
+        document.removeEventListener('scroll', scheduleSnapshot, true);
+        currentTaskbarList = null;
+        currentTaskbarRoot = null;
+    }
+
+    function connectTaskbarListObserver(rootEl, listEl) {
+        if (!(rootEl instanceof HTMLElement) || !(listEl instanceof HTMLElement)) return;
+
+        if (currentTaskbarList === listEl && currentTaskbarRoot === rootEl) {
+            return;
+        }
+
+        disconnectTaskbarListObserver();
+        currentTaskbarRoot = rootEl;
+        currentTaskbarList = listEl;
+
+        primeExistingEntries();
+        listObserver = new MutationObserver(handleTaskbarListMutations);
+        listObserver.observe(listEl, {
+            childList: true,
+            subtree: true
+        });
+
+        window.addEventListener('resize', scheduleSnapshot);
+        document.addEventListener('scroll', scheduleSnapshot, true);
+        scheduleSnapshot();
+    }
+
+    function resolveTaskbarNodes() {
+        const root = document.querySelector(TASKBAR_ROOT_SELECTOR);
+        if (!(root instanceof HTMLElement)) return { root: null, list: null };
+        const list = root.querySelector(TASKBAR_LIST_SELECTOR);
+        if (!(list instanceof HTMLElement)) return { root, list: null };
+        return { root, list };
+    }
+
+    function ensureTaskbarObservers() {
+        const { root, list } = resolveTaskbarNodes();
+        if (!(root instanceof HTMLElement) || !(list instanceof HTMLElement)) {
+            if (currentTaskbarList instanceof HTMLElement) {
+                disconnectTaskbarListObserver();
+            }
+            return;
+        }
+        connectTaskbarListObserver(root, list);
+    }
+
+    function startObserving() {
+        if (!document.body) return;
+
+        ensureTaskbarObservers();
+        bodyObserver = new MutationObserver(() => {
+            if (currentTaskbarList instanceof HTMLElement && !currentTaskbarList.isConnected) {
+                disconnectTaskbarListObserver();
+            }
+            if (!(currentTaskbarList instanceof HTMLElement)) {
+                ensureTaskbarObservers();
+            }
+        });
+
+        bodyObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        window._cleanupTaskbarAnimationObservers = () => {
+            disconnectTaskbarListObserver();
+            if (bodyObserver) {
+                bodyObserver.disconnect();
+                bodyObserver = null;
+            }
+            listResizeTimers.forEach((timerId) => {
+                window.clearTimeout(timerId);
+            });
+            listResizeTimers.clear();
+        };
+    }
+
+    if (document.body) {
+        startObserving();
+        return;
+    }
+
+    document.addEventListener('DOMContentLoaded', startObserving, { once: true });
+}
+
 
 // 初始化函数
 function initialize() {
 	applyFigmaSquirclesFromConfig();
     setupAppWindowAnimations();
+    setupTaskbarItemAnimations();
 }
 
 // DOM 加载完毕后执行初始化
@@ -741,4 +1087,5 @@ document.addEventListener("DOMContentLoaded", initialize);
 applyFigmaSquirclesFromConfig();
 if (document.readyState !== 'loading') {
     setupAppWindowAnimations();
+    setupTaskbarItemAnimations();
 }
