@@ -448,6 +448,92 @@ function setupAppWindowAnimations() {
         return windowEl.getClientRects().length > 0;
     }
 
+    function normalizeIconKey(src) {
+        if (typeof src !== 'string' || !src.trim()) return '';
+        try {
+            const url = new URL(src, window.location.origin);
+            let path = url.pathname.toLowerCase();
+            path = path.replace(/icon_\{0\}\.png$/, 'icon.png');
+            return path;
+        } catch {
+            return src.split('?')[0].toLowerCase();
+        }
+    }
+
+    function getWindowIconKey(windowEl) {
+        if (!(windowEl instanceof HTMLElement)) return '';
+        const img = windowEl.querySelector('.trim-ui__app-layout--header-title img');
+        if (!(img instanceof HTMLImageElement)) return '';
+        const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+        return normalizeIconKey(src);
+    }
+
+    function getTaskbarIconEntries() {
+        const navRoot = document.querySelector('.h-screen.fixed.left-0');
+        if (!(navRoot instanceof Element)) return [];
+
+        const icons = Array.from(navRoot.querySelectorAll('img'));
+        return icons
+            .map((img) => {
+                if (!(img instanceof HTMLImageElement)) return null;
+                const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+                const key = normalizeIconKey(src);
+                if (!key) return null;
+                if (!key.includes('/static/app/icons/') && !key.includes('/app-center-static/serviceicon/')) {
+                    return null;
+                }
+
+                const clickable =
+                    img.closest('[tabindex]') ||
+                    img.closest('.flex.h-9') ||
+                    img.closest('.flex.h-10.w-\\[47px\\]') ||
+                    img;
+                if (!(clickable instanceof HTMLElement)) return null;
+
+                const rect = clickable.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) return null;
+
+                return {
+                    key,
+                    rect,
+                    size: Math.max(1, Math.min(rect.width, rect.height))
+                };
+            })
+            .filter(Boolean);
+    }
+
+    function resolveTaskbarTarget(windowEl) {
+        const taskbarEntries = getTaskbarIconEntries();
+        if (!taskbarEntries.length) return null;
+
+        const allWindows = Array.from(document.querySelectorAll('.trim-ui__app-layout--window'));
+        const globalWindowIndex = allWindows.indexOf(windowEl);
+        const safeGlobalIndex = globalWindowIndex >= 0 ? globalWindowIndex : 0;
+
+        const windowIconKey = getWindowIconKey(windowEl);
+        let candidates = taskbarEntries;
+        let targetIndex = safeGlobalIndex;
+
+        if (windowIconKey) {
+            const sameAppEntries = taskbarEntries.filter((entry) => entry.key === windowIconKey);
+            if (sameAppEntries.length) {
+                const sameAppWindows = allWindows.filter((item) => getWindowIconKey(item) === windowIconKey);
+                const sameAppIndex = sameAppWindows.indexOf(windowEl);
+                candidates = sameAppEntries;
+                targetIndex = sameAppIndex >= 0 ? sameAppIndex : 0;
+            }
+        }
+
+        const resolved = candidates[Math.min(targetIndex, candidates.length - 1)] || candidates[0];
+        if (!resolved) return null;
+
+        return {
+            x: resolved.rect.left + resolved.rect.width * 0.5,
+            y: resolved.rect.top + resolved.rect.height * 0.5,
+            size: resolved.size
+        };
+    }
+
     function animateWindowRestore(windowEl) {
         if (!(windowEl instanceof HTMLElement)) return;
         if (shouldReduceMotion()) return;
@@ -493,14 +579,15 @@ function setupAppWindowAnimations() {
         const windowCenterX = rect.left + rect.width * 0.5;
         const windowCenterY = rect.top + rect.height * 0.5;
 
-        // 左侧任务栏图标区域中心点
-        const targetX = Math.max(34, viewportWidth * 0.022);
-        const targetY = viewportHeight * 0.50;
+        // 优先飞向对应任务栏图标中心；匹配不到时回退到左侧中线
+        const resolvedTarget = resolveTaskbarTarget(windowEl);
+        const targetX = resolvedTarget ? resolvedTarget.x : Math.max(34, viewportWidth * 0.022);
+        const targetY = resolvedTarget ? resolvedTarget.y : viewportHeight * 0.50;
         const deltaX = targetX - windowCenterX;
         const deltaY = targetY - windowCenterY;
 
-        // 目标缩放到接近图标尺寸，避免不同窗口大小下观感差异过大
-        const targetSize = 64;
+        // 目标缩放到接近对应图标尺寸，避免不同窗口大小下观感差异过大
+        const targetSize = resolvedTarget ? resolvedTarget.size : 64;
         const widthScale = targetSize / Math.max(rect.width, 1);
         const heightScale = targetSize / Math.max(rect.height, 1);
         const minimizeScale = Math.max(0.08, Math.min(0.26, Math.min(widthScale, heightScale)));
