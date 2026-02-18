@@ -43,6 +43,8 @@
         "basic_mod.css",
         "windows_titlebar_mod.css",
         "mac_titlebar_mod.css",
+        "classic_launchpad_mod.css",
+        "spotlight_launchpad_mod.css",
         "mod.js"
       ],
       "matches": [

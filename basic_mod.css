@@ -282,6 +282,7 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
 }
 
 /* 右键菜单 */
+
 .min-w-\[6\.875rem\].rounded-lg.border.border-solid.border-\[var\(--semi-color-border-select\)\].bg-\[var\(--semi-color-bg-dropdown\)\].py-1.text-\[var\(--semi-color-text-0\)\].shadow-dropdown.left-\[105\%\].right-auto {
     border-radius: 26px;
     corner-shape: superellipse(2);
@@ -491,40 +492,6 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     padding-bottom: 19px !important;
 }
 
-/* 启动台 */
-
-.flex.flex-col.justify-start.items-center.pl-\[280px\].pr-\[216px\].py-\[64px\].h-full.box-border {
-    padding-left: calc(54px + .875rem);
-    padding-right: 0;
-
-
-    .semi-input-wrapper,
-    .semi-input-wrapper:hover,
-    .semi-input-wrapper.w-full.\!h-\[44px\].rounded-\[8px\].border.border-solid.box-border.py-\[5px\].px-\[10px\].placeholder\:text-white-50.\!bg-white-10.\!text-base.font-normal.leading-\[22px\].\!text-white.\!border-white-20.semi-input-wrapper__with-prefix.semi-input-wrapper-default,
-    .semi-input-wrapper.w-full.\!h-\[44px\].rounded-\[8px\].border.border-solid.box-border.py-\[5px\].px-\[10px\].placeholder\:text-white-50.\!bg-white-10.\!text-base.font-normal.leading-\[22px\].\!text-white.\!border-white-20.semi-input-wrapper__with-prefix.semi-input-wrapper-default:hover {
-        width: 100%;
-        border-radius: 999px !important;
-        padding: 12px 16px;
-        corner-shape: superellipse(2);
-    }
-
-    .w-\[380px\].pb-base-loose {
-        width: 75% !important;
-        max-width: 348px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .semi-input-wrapper>div>svg,
-    .semi-input-wrapper>div>svg:hover,
-    .semi-input-wrapper.w-full.\!h-\[44px\].rounded-\[8px\].border.border-solid.box-border.py-\[5px\].px-\[10px\].placeholder\:text-white-50.\!bg-white-10.\!text-base.font-normal.leading-\[22px\].\!text-white.\!border-white-20.semi-input-wrapper__with-prefix.semi-input-wrapper-default>div>svg {
-        height: 16px;
-        width: 16px;
-    }
-
-}
-
 /* ========= 浅色模式补丁 ========= */
 body:not([theme-mode="dark"]) {
 
@@ -558,8 +525,24 @@ body:not([theme-mode="dark"]) {
     }
 }
 
+/* 弹窗 */
+
 .semi-modal-content {
     background-color:
         color-mix(in srgb, var(--semi-color-bg-2) 75%, var(--semi-color-border-modal) 50%);
     backdrop-filter: blur(18px);
+}
+
+/* 表格 */
+
+.semi-table-thead>.semi-table-row>.semi-table-row-head.semi-table-cell-fixed-left:before,
+.semi-table-thead>.semi-table-row>.semi-table-row-head.semi-table-cell-fixed-right:before,
+.semi-table-tbody>.semi-table-row>.semi-table-cell-fixed-left,
+.semi-table-tbody>.semi-table-row>.semi-table-cell-fixed-right,
+.semi-table-header-sticky .semi-table-thead>.semi-table-row>.semi-table-row-head,
+.semi-table-tbody>.semi-table-row,
+.semi-table-tbody>.semi-table-row:hover>.semi-table-row-cell.semi-table-cell-fixed-left,
+.semi-table-tbody>.semi-table-row:hover>.semi-table-row-cell.semi-table-cell-fixed-right {
+    background: transparent;
+    background-image: none;
 }

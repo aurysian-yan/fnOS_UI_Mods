@@ -4,6 +4,7 @@
   const ORIGIN = location.origin;
   const BASIC_STYLE_ID = 'fnos-ui-mods-basic-style';
   const TITLEBAR_STYLE_ID = 'fnos-ui-mods-titlebar-style';
+  const LAUNCHPAD_STYLE_ID = 'fnos-ui-mods-launchpad-style';
   const SCRIPT_ID = 'fnos-ui-mods-script';
   const THEME_STYLE_ID = 'fnos-ui-mods-theme-style';
   const FONT_STYLE_ID = 'fnos-ui-mods-font-style';
@@ -46,6 +47,11 @@
   const TITLEBAR_STYLES = {
     windows: 'windows_titlebar_mod.css',
     mac: 'mac_titlebar_mod.css'
+  };
+
+  const LAUNCHPAD_STYLES = {
+    classic: 'classic_launchpad_mod.css',
+    spotlight: 'spotlight_launchpad_mod.css'
   };
 
   function clamp255(value) {
@@ -539,10 +545,13 @@
     }
   }
 
-  function injectStyles(titlebarStyle) {
+  function injectStyles(titlebarStyle, launchpadStyle) {
     const normalizedStyle = titlebarStyle === 'mac' ? 'mac' : 'windows';
+    const normalizedLaunchpadStyle =
+      launchpadStyle === 'spotlight' ? 'spotlight' : 'classic';
     injectStyle(BASIC_STYLE_ID, 'basic_mod.css');
     injectStyle(TITLEBAR_STYLE_ID, TITLEBAR_STYLES[normalizedStyle]);
+    injectStyle(LAUNCHPAD_STYLE_ID, LAUNCHPAD_STYLES[normalizedLaunchpadStyle]);
   }
 
   function injectScript() {
@@ -555,9 +564,15 @@
     (document.head || document.documentElement).appendChild(script);
   }
 
-  function startInject(titlebarStyle, brandColor, fontSettings, customCodeSettings) {
+  function startInject(
+    titlebarStyle,
+    launchpadStyle,
+    brandColor,
+    fontSettings,
+    customCodeSettings
+  ) {
     isInjectionActive = true;
-    injectStyles(titlebarStyle);
+    injectStyles(titlebarStyle, launchpadStyle);
     updateBrandColor(brandColor);
     updateFontSettings(fontSettings || currentFontSettings);
     updateCustomCodeSettings(customCodeSettings || currentCustomCodeSettings);
@@ -636,6 +651,7 @@
 
         startInject(
           message.titlebarStyle,
+          message.launchpadStyle,
           message.brandColor ?? currentBrandColor,
           message.fontSettings ?? currentFontSettings,
           message.customCodeSettings ?? currentCustomCodeSettings
@@ -668,6 +684,7 @@
       enabledOrigins: [],
       autoEnableSuspectedFnOS: true,
       titlebarStyle: 'windows',
+      launchpadStyle: 'classic',
       brandColor: THEME_DEFAULT_BRAND,
       fontOverrideEnabled: FONT_DEFAULT_SETTINGS.enabled,
       fontFamily: FONT_DEFAULT_SETTINGS.family,
@@ -681,6 +698,7 @@
       enabledOrigins,
       autoEnableSuspectedFnOS,
       titlebarStyle,
+      launchpadStyle,
       brandColor,
       fontOverrideEnabled,
       fontFamily,
@@ -713,6 +731,7 @@
       if (isWhitelisted || autoEnabled) {
         startInject(
           titlebarStyle,
+          launchpadStyle,
           brandColor,
           syncedFontSettings,
           syncedCustomCodeSettings

@@ -14,7 +14,9 @@ const FILES = {
   js: path.join(ROOT_DIR, 'mod.js'),
   basicCss: path.join(ROOT_DIR, 'basic_mod.css'),
   windowsTitlebarCss: path.join(ROOT_DIR, 'windows_titlebar_mod.css'),
-  macTitlebarCss: path.join(ROOT_DIR, 'mac_titlebar_mod.css')
+  macTitlebarCss: path.join(ROOT_DIR, 'mac_titlebar_mod.css'),
+  classicLaunchpadCss: path.join(ROOT_DIR, 'classic_launchpad_mod.css'),
+  spotlightLaunchpadCss: path.join(ROOT_DIR, 'spotlight_launchpad_mod.css')
 };
 
 const LEGACY_BUILD_FILES = [
@@ -60,6 +62,8 @@ function createI18n(lang) {
     logoHint: '本工具将引导你进行配置，并将最终 mod 构建到 ssh 目录',
     titlebarPrompt: '请选择标题栏风格 [1=Windows, 2=macOS]：',
     titlebarInvalid: '请输入 1 或 2。',
+    launchpadPrompt: '请选择启动台风格 [1=Classic, 2=Spotlight]：',
+    launchpadInvalid: '请输入 1 或 2。',
     brandPrompt: `请输入主题色 HEX（回车跳过，不替换默认配色）：`,
     brandInvalid: '颜色格式错误，例如：#0066ff',
     fontEnablePrompt: '是否启用字体替换？[y/N]：',
@@ -69,7 +73,8 @@ function createI18n(lang) {
     fontFeaturePrompt: '请输入 font-feature-settings（可选，例如: "tnum" 1）：',
     missingFile: (filePath) => `缺少必需文件: ${filePath}`,
     wroteFile: (filePath) => `已写入 ${filePath}`,
-    buildComplete: (titlebar, brandLabel) => `构建完成（标题栏=${titlebar}，主题色=${brandLabel}）`,
+    buildComplete: (titlebar, launchpad, brandLabel) =>
+      `构建完成（标题栏=${titlebar}，启动台=${launchpad}，主题色=${brandLabel}）`,
     themeSkipped: '未替换（保持默认）',
     removedLegacy: (filePath) => `已清理遗留文件 ${filePath}`,
     buildFailed: (message) => `构建失败: ${message}`,
@@ -84,6 +89,8 @@ function createI18n(lang) {
     logoHint: 'This tool will guide you through the configuration and build the final mod to the ssh directory',
     titlebarPrompt: 'Select titlebar style [1=Windows, 2=macOS]:',
     titlebarInvalid: 'Please input 1 or 2.',
+    launchpadPrompt: 'Select launchpad style [1=Classic, 2=Spotlight]:',
+    launchpadInvalid: 'Please input 1 or 2.',
     brandPrompt: 'Brand color hex (press Enter to skip and keep default):',
     brandInvalid: 'Invalid hex. Example: #0066ff',
     fontEnablePrompt: 'Enable custom font override? [y/N]:',
@@ -94,8 +101,8 @@ function createI18n(lang) {
     fontFeaturePrompt: 'font-feature-settings (optional, e.g. "tnum" 1):',
     missingFile: (filePath) => `Missing required file: ${filePath}`,
     wroteFile: (filePath) => `Wrote ${filePath}`,
-    buildComplete: (titlebar, brandLabel) =>
-      `Build complete (titlebar=${titlebar}, brand=${brandLabel}).`,
+    buildComplete: (titlebar, launchpad, brandLabel) =>
+      `Build complete (titlebar=${titlebar}, launchpad=${launchpad}, brand=${brandLabel}).`,
     themeSkipped: 'skipped (default)',
     removedLegacy: (filePath) => `Removed legacy file ${filePath}`,
     buildFailed: (message) => `Build failed: ${message}`,
@@ -394,6 +401,20 @@ async function askQuestions(paint) {
       }
     }
 
+    let launchpad = '';
+    while (!launchpad) {
+      const answer = (await rl.question(paint.info(`${ICONS.step} ${t.launchpadPrompt} `)))
+        .trim()
+        .toLowerCase();
+      if (answer === '1' || answer === 'classic' || answer === 'c') {
+        launchpad = 'classic';
+      } else if (answer === '2' || answer === 'spotlight' || answer === 's') {
+        launchpad = 'spotlight';
+      } else {
+        console.log(paint.warn(`${ICONS.warn} ${t.launchpadInvalid}`));
+      }
+    }
+
     let brandColor = DEFAULT_BRAND;
     let themeEnabled = false;
     while (true) {
@@ -439,7 +460,7 @@ async function askQuestions(paint) {
       )).trim();
     }
 
-    return { titlebar, brandColor, themeEnabled, fontConfig, t };
+    return { titlebar, launchpad, brandColor, themeEnabled, fontConfig, t };
   } finally {
     rl.close();
   }
@@ -447,35 +468,51 @@ async function askQuestions(paint) {
 
 async function main() {
   const paint = createPaint();
-  const { titlebar, brandColor, themeEnabled, fontConfig, t } = await askQuestions(paint);
+  const { titlebar, launchpad, brandColor, themeEnabled, fontConfig, t } = await askQuestions(paint);
 
   await Promise.all([
     ensureFileExists(FILES.js),
     ensureFileExists(FILES.basicCss),
     ensureFileExists(FILES.windowsTitlebarCss),
-    ensureFileExists(FILES.macTitlebarCss)
+    ensureFileExists(FILES.macTitlebarCss),
+    ensureFileExists(FILES.classicLaunchpadCss),
+    ensureFileExists(FILES.spotlightLaunchpadCss)
   ]).catch((error) => {
     throw new Error(t.missingFile(error.message));
   });
 
   await fs.mkdir(OUT_DIR, { recursive: true });
 
-  const [jsContent, basicCssContent, windowsTitlebarCssContent, macTitlebarCssContent] =
+  const [
+    jsContent,
+    basicCssContent,
+    windowsTitlebarCssContent,
+    macTitlebarCssContent,
+    classicLaunchpadCssContent,
+    spotlightLaunchpadCssContent
+  ] =
     await Promise.all([
       fs.readFile(FILES.js, 'utf8'),
       fs.readFile(FILES.basicCss, 'utf8'),
       fs.readFile(FILES.windowsTitlebarCss, 'utf8'),
-      fs.readFile(FILES.macTitlebarCss, 'utf8')
+      fs.readFile(FILES.macTitlebarCss, 'utf8'),
+      fs.readFile(FILES.classicLaunchpadCss, 'utf8'),
+      fs.readFile(FILES.spotlightLaunchpadCss, 'utf8')
     ]);
 
   const titlebarCssContent =
     titlebar === 'windows' ? windowsTitlebarCssContent : macTitlebarCssContent;
   const titlebarFilePath = titlebar === 'windows' ? FILES.windowsTitlebarCss : FILES.macTitlebarCss;
+  const launchpadCssContent =
+    launchpad === 'spotlight' ? spotlightLaunchpadCssContent : classicLaunchpadCssContent;
+  const launchpadFilePath =
+    launchpad === 'spotlight' ? FILES.spotlightLaunchpadCss : FILES.classicLaunchpadCss;
 
   const mergedCss = mergeCss(
     [
       { filePath: FILES.basicCss, content: basicCssContent },
-      { filePath: titlebarFilePath, content: titlebarCssContent }
+      { filePath: titlebarFilePath, content: titlebarCssContent },
+      { filePath: launchpadFilePath, content: launchpadCssContent }
     ],
     {
       themeCss: themeEnabled ? buildThemeCss(brandColor) : '',
@@ -492,7 +529,7 @@ async function main() {
   await cleanupLegacyFiles(t, paint);
 
   const brandLabel = themeEnabled ? brandColor : t.themeSkipped;
-  console.log(paint.ok(`${ICONS.ok} ${t.buildComplete(titlebar, brandLabel)}`));
+  console.log(paint.ok(`${ICONS.ok} ${t.buildComplete(titlebar, launchpad, brandLabel)}`));
 }
 
 main().catch((error) => {

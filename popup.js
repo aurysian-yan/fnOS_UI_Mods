@@ -5,7 +5,10 @@
   const autoSuspectedFnOSEl = document.getElementById("autoSuspectedFnOS");
   const styleWindowsEl = document.getElementById("styleWindows");
   const styleMacEl = document.getElementById("styleMac");
+  const styleClassicLaunchpadEl = document.getElementById("styleClassicLaunchpad");
+  const styleSpotlightLaunchpadEl = document.getElementById("styleSpotlightLaunchpad");
   const platformGroupEl = document.getElementById("platformGroup");
+  const launchpadGroupEl = document.getElementById("launchpadGroup");
   const brandColorEl = document.getElementById("brandColor");
   const resetBrandColorEl = document.getElementById("resetBrandColor");
   const brandColorTextEl = document.getElementById("brandColorText");
@@ -96,7 +99,9 @@
   function updatePlatformOptionsVisibility() {
     const hasAnyInjectionOptionOn =
       siteToggleEl.checked || autoSuspectedFnOSEl.checked;
-    platformGroupEl.style.display = hasAnyInjectionOptionOn ? "block" : "none";
+    const display = hasAnyInjectionOptionOn ? "block" : "none";
+    platformGroupEl.style.display = display;
+    launchpadGroupEl.style.display = display;
   }
 
   function updateFontSettingsVisibility() {
@@ -485,11 +490,15 @@
       siteToggleEl.checked || (autoSuspectedFnOSEl.checked && isFnOSWebUi);
     if (!shouldInject) return;
 
-    const style = styleMacEl.checked ? "mac" : "windows";
+    const titlebarStyle = styleMacEl.checked ? "mac" : "windows";
+    const launchpadStyle = styleSpotlightLaunchpadEl.checked
+      ? "spotlight"
+      : "classic";
     try {
       await chrome.tabs.sendMessage(tab.id, {
         type: "FNOS_APPLY",
-        titlebarStyle: style,
+        titlebarStyle,
+        launchpadStyle,
         brandColor,
         fontSettings: getFontPayload(),
         customCodeSettings: getCustomCodePayload(),
@@ -546,6 +555,8 @@
     autoSuspectedFnOSEl.disabled = true;
     styleWindowsEl.disabled = true;
     styleMacEl.disabled = true;
+    styleClassicLaunchpadEl.disabled = true;
+    styleSpotlightLaunchpadEl.disabled = true;
 
     if (fontOverrideEnabledEl) fontOverrideEnabledEl.disabled = true;
     if (fontFamilyEl) fontFamilyEl.disabled = true;
@@ -584,6 +595,7 @@
     enabledOrigins: [],
     autoEnableSuspectedFnOS: true,
     titlebarStyle: "windows",
+    launchpadStyle: "classic",
     brandColor: DEFAULT_BRAND_COLOR,
     fontOverrideEnabled: DEFAULT_FONT_SETTINGS.enabled,
     fontFamily: DEFAULT_FONT_SETTINGS.family,
@@ -650,6 +662,10 @@
   const titlebarStyle = state.titlebarStyle === "mac" ? "mac" : "windows";
   styleWindowsEl.checked = titlebarStyle === "windows";
   styleMacEl.checked = titlebarStyle === "mac";
+  const launchpadStyle =
+    state.launchpadStyle === "spotlight" ? "spotlight" : "classic";
+  styleClassicLaunchpadEl.checked = launchpadStyle === "classic";
+  styleSpotlightLaunchpadEl.checked = launchpadStyle === "spotlight";
 
   setBrandColorUI(brandColor);
   setFontSettingsUI(fontSettings);
@@ -683,6 +699,14 @@
     radio.addEventListener("change", async () => {
       if (!radio.checked) return;
       await safeSyncSet({ titlebarStyle: radio.value });
+      await applyToCurrentTabIfNeeded();
+    });
+  }
+
+  for (const radio of [styleClassicLaunchpadEl, styleSpotlightLaunchpadEl]) {
+    radio.addEventListener("change", async () => {
+      if (!radio.checked) return;
+      await safeSyncSet({ launchpadStyle: radio.value });
       await applyToCurrentTabIfNeeded();
     });
   }
