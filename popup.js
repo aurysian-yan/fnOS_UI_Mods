@@ -150,8 +150,14 @@
         typeof item.title === "string" && item.title.trim()
           ? item.title.trim()
           : key.split("/").pop() || key;
+      const iconSrc =
+        typeof item.iconSrc === "string" && item.iconSrc.trim()
+          ? item.iconSrc.trim()
+          : typeof item.src === "string" && item.src.trim()
+            ? item.src.trim()
+            : "";
       if (keyMap.has(key)) return;
-      keyMap.set(key, { key, title });
+      keyMap.set(key, { key, title, iconSrc });
     });
     return Array.from(keyMap.values());
   }
@@ -180,7 +186,7 @@
     launchpadAppListEl.textContent = "";
     const fragment = document.createDocumentFragment();
 
-    normalizedItems.forEach(({ key, title }) => {
+    normalizedItems.forEach(({ key, title, iconSrc }) => {
       const itemEl = document.createElement("label");
       itemEl.className = "launchpad-app-item";
 
@@ -192,7 +198,6 @@
         const nextMaskSet = new Set(launchpadIconMaskOnlyKeys);
         if (checkboxEl.checked) {
           nextSet.add(key);
-          nextMaskSet.delete(key);
         } else {
           nextSet.delete(key);
         }
@@ -214,7 +219,6 @@
         const nextMaskSet = new Set(launchpadIconMaskOnlyKeys);
         if (maskOnlyEl.checked) {
           nextMaskSet.add(key);
-          nextSet.delete(key);
         } else {
           nextMaskSet.delete(key);
         }
@@ -231,12 +235,21 @@
       const textWrapEl = document.createElement("span");
       textWrapEl.className = "launchpad-app-text";
 
+      const titleRowEl = document.createElement("span");
+      titleRowEl.className = "launchpad-app-title-row";
+
+      const iconEl = document.createElement("img");
+      iconEl.className = "launchpad-app-icon";
+      iconEl.alt = "";
+      if (iconSrc) {
+        iconEl.src = iconSrc;
+      }
+      iconEl.addEventListener("error", () => {
+        iconEl.style.visibility = "hidden";
+      });
+
       const titleEl = document.createElement("span");
       titleEl.textContent = title;
-
-      const keyEl = document.createElement("code");
-      keyEl.className = "launchpad-app-key";
-      keyEl.textContent = key;
 
       const modeWrapEl = document.createElement("span");
       modeWrapEl.className = "launchpad-app-modes";
@@ -245,18 +258,19 @@
       scaleLabelEl.className = "launchpad-mode-tag";
       scaleLabelEl.title = "缩放到 0.75";
       scaleLabelEl.appendChild(checkboxEl);
-      scaleLabelEl.append("缩");
+      scaleLabelEl.append("缩放");
 
       const maskLabelEl = document.createElement("label");
       maskLabelEl.className = "launchpad-mode-tag";
-      maskLabelEl.title = "仅裁切蒙版，不缩放";
+      maskLabelEl.title = "仅裁切蒙版，可与缩放叠加";
       maskLabelEl.appendChild(maskOnlyEl);
-      maskLabelEl.append("蒙");
+      maskLabelEl.append("蒙版");
       modeWrapEl.appendChild(scaleLabelEl);
       modeWrapEl.appendChild(maskLabelEl);
 
-      textWrapEl.appendChild(titleEl);
-      textWrapEl.appendChild(keyEl);
+      titleRowEl.appendChild(iconEl);
+      titleRowEl.appendChild(titleEl);
+      textWrapEl.appendChild(titleRowEl);
       itemEl.appendChild(textWrapEl);
       itemEl.appendChild(modeWrapEl);
       fragment.appendChild(itemEl);
@@ -277,7 +291,11 @@
         type: "FNOS_GET_LAUNCHPAD_APP_ITEMS"
       });
       const fallbackItems = Array.isArray(response?.titles)
-        ? response.titles.map((title) => ({ title, key: String(title || "").trim() }))
+        ? response.titles.map((title) => ({
+            title,
+            key: String(title || "").trim(),
+            iconSrc: ""
+          }))
         : [];
       const items = normalizeLaunchpadAppItems(response?.items || fallbackItems);
       if (!items.length) {
@@ -289,9 +307,8 @@
       const nextMaskOnly = launchpadIconMaskOnlyKeys.filter((key) =>
         availableSet.has(key)
       );
-      const maskOnlySet = new Set(nextMaskOnly);
       const nextSelected = launchpadIconScaleSelectedKeys.filter(
-        (key) => availableSet.has(key) && !maskOnlySet.has(key)
+        (key) => availableSet.has(key)
       );
       const hasSelectionChanged =
         nextSelected.length !== launchpadIconScaleSelectedKeys.length;
@@ -884,12 +901,6 @@
   launchpadIconMaskOnlyKeys = normalizeLaunchpadKeyList(
     state.launchpadIconMaskOnlyKeys
   );
-  if (launchpadIconMaskOnlyKeys.length && launchpadIconScaleSelectedKeys.length) {
-    const maskOnlySet = new Set(launchpadIconMaskOnlyKeys);
-    launchpadIconScaleSelectedKeys = launchpadIconScaleSelectedKeys.filter(
-      (key) => !maskOnlySet.has(key)
-    );
-  }
 
   setBrandColorUI(brandColor);
   setFontSettingsUI(fontSettings);
