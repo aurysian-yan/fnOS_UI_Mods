@@ -591,6 +591,92 @@
       word-break: break-all;
     }
 
+    .launchpad-extra-settings {
+      margin-top: 8px;
+      width: 100%;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+
+    .launchpad-app-list {
+      margin-top: 6px;
+      padding: 8px;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      max-height: 86px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.45;
+      font-family: "SarasaMonoSC", monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .launchpad-app-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .launchpad-app-item + .launchpad-app-item {
+      border-top: 1px solid color-mix(in srgb, var(--card-border) 80%, transparent);
+      margin-top: 4px;
+      padding-top: 4px;
+    }
+
+    .launchpad-app-item input {
+      margin: 0;
+      accent-color: var(--switch-on);
+    }
+
+    .launchpad-app-item span {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .launchpad-app-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    .launchpad-app-key {
+      font-size: 11px;
+      opacity: 0.8;
+      word-break: break-all;
+    }
+
+    .launchpad-app-modes {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .launchpad-mode-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 2px 6px;
+      border: 1px solid var(--card-border);
+      border-radius: 999px;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .launchpad-mode-tag input {
+      width: 12px;
+      height: 12px;
+    }
+
     .blur-effect {
       z-index: 998 !important;
       height: 58px;
@@ -605,7 +691,8 @@
       .platform-group,
       .font-settings,
       .color-settings,
-      .custom-code-settings {
+      .custom-code-settings,
+      .launchpad-extra-settings {
         border-radius: 16px;
         corner-shape: superellipse(1.5);
       }
@@ -770,6 +857,21 @@
           <div class="platform-desc">聚焦搜索与面板视觉风格</div>
         </div>
       </label>
+    </div>
+
+    <div class="launchpad-extra-settings">
+      <div class="row">
+        <div class="label">
+          启动台图标缩放
+          <div class="sub">勾选要独立控制的图标（按 icon src 匹配）</div>
+        </div>
+        <label class="switch">
+          <input id="launchpadIconScaleEnabled" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p id="launchpadAppListStatus" class="field-help">应用列表：等待读取</p>
+      <div id="launchpadAppList" class="launchpad-app-list">暂无数据</div>
     </div>
 
     <div class="font-settings">

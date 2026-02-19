@@ -10,6 +10,7 @@
   const FONT_STYLE_ID = 'fnos-ui-mods-font-style';
   const CUSTOM_CSS_STYLE_ID = 'fnos-ui-mods-custom-css-style';
   const CUSTOM_JS_SCRIPT_ID = 'fnos-ui-mods-custom-js-script';
+  const LAUNCHPAD_ICON_SCALE_STYLE_ID = 'fnos-ui-mods-launchpad-icon-scale-style';
 
   const THEME_DEFAULT_BRAND = '#0066ff';
   const BRAND_LIGHTNESS_MIN = 0.3;
@@ -34,13 +35,50 @@
     css: '',
     js: ''
   };
+  const LAUNCHPAD_DESKTOP_ICON_CARD_CLASS_TOKENS = [
+    'flex',
+    'h-[124px]',
+    'w-[130px]',
+    'cursor-pointer',
+    'flex-col',
+    'items-center',
+    'justify-center',
+    'gap-4'
+  ];
+  const LAUNCHPAD_PANEL_ICON_CARD_CLASS_TOKENS = [
+    'flex',
+    'flex-col',
+    'justify-center',
+    'items-center',
+    'w-[172px]',
+    'h-[156px]',
+    'cursor-pointer'
+  ];
+  const LAUNCHPAD_ICON_BOX_CLASS_TOKENS = [
+    'box-border',
+    'size-[80px]',
+    'p-[15%]'
+  ];
+  const LAUNCHPAD_ICON_BASE_CLASS = 'fnos-launchpad-icon-box--processed';
+  const LAUNCHPAD_ICON_BOX_CLASS = 'fnos-launchpad-icon-box--scaled';
+  const LAUNCHPAD_ICON_MASK_ONLY_CLASS = 'fnos-launchpad-icon-box--mask-only';
+  const LAUNCHPAD_ICON_SRC_PREFIXES = [
+    '/static/app/icons/',
+    '/app-center-static/serviceicon/'
+  ];
 
   let currentBrandColor = THEME_DEFAULT_BRAND;
   let currentFontSettings = { ...FONT_DEFAULT_SETTINGS };
   let currentCustomCodeSettings = { ...CUSTOM_CODE_DEFAULT_SETTINGS };
+  let currentLaunchpadIconScaleEnabled = false;
+  let currentLaunchpadIconScaleSelectedKeys = [];
+  let currentLaunchpadIconMaskOnlyKeys = [];
   let currentUploadedFontDataUrl = '';
   let currentUploadedFontFileName = '';
   let currentUploadedFontFormat = '';
+  let currentLaunchpadAppItems = [];
+  let launchpadIconObserver = null;
+  let launchpadIconRefreshRafId = 0;
   let lastAppliedCustomJs = '';
   let isInjectionActive = false;
 
@@ -53,6 +91,284 @@
     classic: 'classic_launchpad_mod.css',
     spotlight: 'spotlight_launchpad_mod.css'
   };
+
+  function ensureLaunchpadIconScaleStyle() {
+    let style = document.getElementById(LAUNCHPAD_ICON_SCALE_STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = LAUNCHPAD_ICON_SCALE_STYLE_ID;
+      (document.head || document.documentElement).appendChild(style);
+    }
+
+    const nextCss = [
+      `.${LAUNCHPAD_ICON_BASE_CLASS} .semi-image {`,
+      '  transform-origin: center center;',
+      '}',
+      `.${LAUNCHPAD_ICON_BOX_CLASS} .semi-image {`,
+      '  transform: scale(0.75) !important;',
+      '}',
+      `.${LAUNCHPAD_ICON_MASK_ONLY_CLASS} .semi-image {`,
+      '  transform: none !important;',
+      '}'
+    ].join('\n');
+
+    if (style.textContent !== nextCss) {
+      style.textContent = nextCss;
+    }
+  }
+
+  function hasAllClasses(el, classTokens) {
+    if (!(el instanceof HTMLElement)) return false;
+    return classTokens.every((token) => el.classList.contains(token));
+  }
+
+  function normalizeLaunchpadKeyList(value, maxLength = 320) {
+    if (!Array.isArray(value)) return [];
+    const unique = new Set();
+    value.forEach((item) => {
+      if (typeof item !== 'string') return;
+      const key = item.trim().slice(0, maxLength);
+      if (!key) return;
+      unique.add(key);
+    });
+    return Array.from(unique);
+  }
+
+  function normalizeLaunchpadIconKey(rawValue) {
+    if (typeof rawValue !== 'string') return '';
+    const raw = rawValue.trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw, window.location.origin);
+      return url.pathname.toLowerCase();
+    } catch {
+      return raw.split('?')[0].toLowerCase();
+    }
+  }
+
+  function isLaunchpadIconKey(key) {
+    if (typeof key !== 'string' || !key) return false;
+    return LAUNCHPAD_ICON_SRC_PREFIXES.some((prefix) => key.includes(prefix));
+  }
+
+  function isLaunchpadDesktopIconCard(el) {
+    return hasAllClasses(el, LAUNCHPAD_DESKTOP_ICON_CARD_CLASS_TOKENS);
+  }
+
+  function isLaunchpadPanelIconCard(el) {
+    return hasAllClasses(el, LAUNCHPAD_PANEL_ICON_CARD_CLASS_TOKENS);
+  }
+
+  function collectLaunchpadIconCards() {
+    const cards = [];
+    document
+      .querySelectorAll('div.cursor-pointer')
+      .forEach((candidateEl) => {
+        if (!(candidateEl instanceof HTMLElement)) return;
+        if (
+          !isLaunchpadDesktopIconCard(candidateEl) &&
+          !isLaunchpadPanelIconCard(candidateEl)
+        ) {
+          return;
+        }
+        const key = extractLaunchpadAppKey(candidateEl);
+        if (!key) return;
+        cards.push(candidateEl);
+      });
+    return cards;
+  }
+
+  function findLaunchpadIconBox(cardEl) {
+    if (!(cardEl instanceof HTMLElement)) return null;
+
+    const candidates = Array.from(cardEl.querySelectorAll('div.box-border'));
+    for (const candidate of candidates) {
+      if (!(candidate instanceof HTMLElement)) continue;
+      if (!hasAllClasses(candidate, LAUNCHPAD_ICON_BOX_CLASS_TOKENS)) continue;
+      if (!candidate.querySelector('.semi-image')) continue;
+      return candidate;
+    }
+
+    return null;
+  }
+
+  function extractLaunchpadAppTitle(cardEl) {
+    if (!(cardEl instanceof HTMLElement)) return '';
+
+    const titleNodes = Array.from(cardEl.querySelectorAll('.line-clamp-1[title], div[title], span[title]'));
+    for (const node of titleNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      const title = (node.getAttribute('title') || '').trim();
+      if (title) return title;
+    }
+
+    const titleText = cardEl
+      .querySelector('.py-base-loose')
+      ?.textContent
+      ?.trim();
+    return typeof titleText === 'string' ? titleText : '';
+  }
+
+  function extractLaunchpadAppKey(cardEl) {
+    if (!(cardEl instanceof HTMLElement)) return '';
+    const imageEl = cardEl.querySelector('.semi-image img');
+    if (!(imageEl instanceof HTMLImageElement)) return '';
+
+    const rawDataSrc = imageEl.getAttribute('data-src') || '';
+    const rawSrc = imageEl.getAttribute('src') || '';
+    const keyFromDataSrc = normalizeLaunchpadIconKey(rawDataSrc);
+    const keyFromSrc = normalizeLaunchpadIconKey(rawSrc);
+    const key = keyFromDataSrc || keyFromSrc;
+    if (!isLaunchpadIconKey(key)) return '';
+    return key;
+  }
+
+  function collectLaunchpadAppItems() {
+    const itemMap = new Map();
+    const cards = collectLaunchpadIconCards();
+    cards.forEach((cardEl) => {
+      const key = extractLaunchpadAppKey(cardEl);
+      if (!key) return;
+      const title = extractLaunchpadAppTitle(cardEl);
+      if (itemMap.has(key)) return;
+      itemMap.set(key, {
+        key,
+        title: title || key.split('/').pop() || key
+      });
+    });
+    return Array.from(itemMap.values());
+  }
+
+  function shouldScaleLaunchpadCard(cardEl, selectedSet, maskOnlySet) {
+    const key = extractLaunchpadAppKey(cardEl);
+    if (!key) return false;
+    if (maskOnlySet instanceof Set && maskOnlySet.has(key)) return false;
+    if (!(selectedSet instanceof Set) || selectedSet.size === 0) return true;
+    return selectedSet.has(key);
+  }
+
+  function shouldMaskOnlyLaunchpadCard(cardEl, maskOnlySet) {
+    if (!(maskOnlySet instanceof Set) || maskOnlySet.size === 0) return false;
+    const key = extractLaunchpadAppKey(cardEl);
+    if (!key) return false;
+    return maskOnlySet.has(key);
+  }
+
+  function setLaunchpadIconScaleOnDom(enabled) {
+    const selectedSet = new Set(currentLaunchpadIconScaleSelectedKeys);
+    const maskOnlySet = new Set(currentLaunchpadIconMaskOnlyKeys);
+    const cards = collectLaunchpadIconCards();
+    const matchedBoxes = new Set();
+
+    cards.forEach((cardEl) => {
+      const boxEl = findLaunchpadIconBox(cardEl);
+      if (!(boxEl instanceof HTMLElement)) return;
+      matchedBoxes.add(boxEl);
+      const shouldScale =
+        enabled && shouldScaleLaunchpadCard(cardEl, selectedSet, maskOnlySet);
+      const shouldMaskOnly =
+        enabled && shouldMaskOnlyLaunchpadCard(cardEl, maskOnlySet);
+      const shouldProcess = shouldScale || shouldMaskOnly;
+      boxEl.classList.toggle(LAUNCHPAD_ICON_BASE_CLASS, shouldProcess);
+      boxEl.classList.toggle(LAUNCHPAD_ICON_BOX_CLASS, shouldScale);
+      boxEl.classList.toggle(LAUNCHPAD_ICON_MASK_ONLY_CLASS, shouldMaskOnly);
+    });
+    document
+      .querySelectorAll(
+        `.${LAUNCHPAD_ICON_BASE_CLASS}, .${LAUNCHPAD_ICON_BOX_CLASS}, .${LAUNCHPAD_ICON_MASK_ONLY_CLASS}`
+      )
+      .forEach((boxEl) => {
+        if (!(boxEl instanceof HTMLElement)) return;
+        if (enabled && matchedBoxes.has(boxEl)) return;
+        boxEl.classList.remove(LAUNCHPAD_ICON_BASE_CLASS);
+        boxEl.classList.remove(LAUNCHPAD_ICON_BOX_CLASS);
+        boxEl.classList.remove(LAUNCHPAD_ICON_MASK_ONLY_CLASS);
+      });
+  }
+
+  function refreshLaunchpadIconState() {
+    launchpadIconRefreshRafId = 0;
+    currentLaunchpadAppItems = collectLaunchpadAppItems();
+    window.__fnosLaunchpadAppIconItems = currentLaunchpadAppItems.map((item) => ({
+      key: item.key,
+      title: item.title
+    }));
+    window.__fnosLaunchpadAppIconTitles = currentLaunchpadAppItems.map((item) => item.title);
+
+    if (currentLaunchpadIconScaleEnabled) {
+      ensureLaunchpadIconScaleStyle();
+    }
+    setLaunchpadIconScaleOnDom(currentLaunchpadIconScaleEnabled);
+  }
+
+  function scheduleLaunchpadIconRefresh() {
+    if (launchpadIconRefreshRafId) return;
+    launchpadIconRefreshRafId = window.requestAnimationFrame(refreshLaunchpadIconState);
+  }
+
+  function stopLaunchpadIconObserver() {
+    if (launchpadIconObserver) {
+      launchpadIconObserver.disconnect();
+      launchpadIconObserver = null;
+    }
+    if (launchpadIconRefreshRafId) {
+      window.cancelAnimationFrame(launchpadIconRefreshRafId);
+      launchpadIconRefreshRafId = 0;
+    }
+  }
+
+  function startLaunchpadIconObserver() {
+    if (!(document.body instanceof HTMLElement)) {
+      document.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          if (!currentLaunchpadIconScaleEnabled) return;
+          startLaunchpadIconObserver();
+          scheduleLaunchpadIconRefresh();
+        },
+        { once: true }
+      );
+      return;
+    }
+    if (launchpadIconObserver) return;
+
+    launchpadIconObserver = new MutationObserver(() => {
+      scheduleLaunchpadIconRefresh();
+    });
+
+    launchpadIconObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'title', 'src', 'data-src']
+    });
+  }
+
+  function updateLaunchpadIconScaleEnabled(
+    nextEnabled,
+    nextSelectedKeys = [],
+    nextMaskOnlyKeys = []
+  ) {
+    currentLaunchpadIconScaleEnabled = Boolean(nextEnabled);
+    currentLaunchpadIconMaskOnlyKeys = normalizeLaunchpadKeyList(nextMaskOnlyKeys);
+    const maskOnlySet = new Set(currentLaunchpadIconMaskOnlyKeys);
+    currentLaunchpadIconScaleSelectedKeys = normalizeLaunchpadKeyList(nextSelectedKeys)
+      .filter((key) => !maskOnlySet.has(key));
+    if (currentLaunchpadIconScaleEnabled) {
+      startLaunchpadIconObserver();
+      scheduleLaunchpadIconRefresh();
+      return;
+    }
+
+    stopLaunchpadIconObserver();
+    setLaunchpadIconScaleOnDom(false);
+    currentLaunchpadAppItems = collectLaunchpadAppItems();
+    window.__fnosLaunchpadAppIconItems = currentLaunchpadAppItems.map((item) => ({
+      key: item.key,
+      title: item.title
+    }));
+    window.__fnosLaunchpadAppIconTitles = currentLaunchpadAppItems.map((item) => item.title);
+  }
 
   function clamp255(value) {
     return Math.max(0, Math.min(255, Math.round(value)));
@@ -569,13 +885,21 @@
     launchpadStyle,
     brandColor,
     fontSettings,
-    customCodeSettings
+    customCodeSettings,
+    launchpadIconScaleEnabled,
+    launchpadIconScaleSelectedKeys,
+    launchpadIconMaskOnlyKeys
   ) {
     isInjectionActive = true;
     injectStyles(titlebarStyle, launchpadStyle);
     updateBrandColor(brandColor);
     updateFontSettings(fontSettings || currentFontSettings);
     updateCustomCodeSettings(customCodeSettings || currentCustomCodeSettings);
+    updateLaunchpadIconScaleEnabled(
+      launchpadIconScaleEnabled,
+      launchpadIconScaleSelectedKeys,
+      launchpadIconMaskOnlyKeys
+    );
     injectScript();
   }
 
@@ -654,12 +978,35 @@
           message.launchpadStyle,
           message.brandColor ?? currentBrandColor,
           message.fontSettings ?? currentFontSettings,
-          message.customCodeSettings ?? currentCustomCodeSettings
+          message.customCodeSettings ?? currentCustomCodeSettings,
+          message.launchpadIconScaleEnabled ?? currentLaunchpadIconScaleEnabled,
+          message.launchpadIconScaleSelectedKeys ??
+            currentLaunchpadIconScaleSelectedKeys,
+          message.launchpadIconMaskOnlyKeys ??
+            currentLaunchpadIconMaskOnlyKeys
         );
 
         sendResponse({ applied: true });
       })();
       return true;
+    }
+
+    if (
+      message?.type === 'FNOS_GET_LAUNCHPAD_APP_ITEMS' ||
+      message?.type === 'FNOS_GET_LAUNCHPAD_APP_TITLES'
+    ) {
+      const items = collectLaunchpadAppItems();
+      currentLaunchpadAppItems = items;
+      window.__fnosLaunchpadAppIconItems = items.map((item) => ({
+        key: item.key,
+        title: item.title
+      }));
+      window.__fnosLaunchpadAppIconTitles = items.map((item) => item.title);
+      sendResponse({
+        items,
+        titles: items.map((item) => item.title)
+      });
+      return;
     }
 
     if (message?.type !== 'FNOS_CHECK') return;
@@ -685,6 +1032,9 @@
       autoEnableSuspectedFnOS: true,
       titlebarStyle: 'windows',
       launchpadStyle: 'classic',
+      launchpadIconScaleEnabled: false,
+      launchpadIconScaleSelectedKeys: [],
+      launchpadIconMaskOnlyKeys: [],
       brandColor: THEME_DEFAULT_BRAND,
       fontOverrideEnabled: FONT_DEFAULT_SETTINGS.enabled,
       fontFamily: FONT_DEFAULT_SETTINGS.family,
@@ -699,6 +1049,9 @@
       autoEnableSuspectedFnOS,
       titlebarStyle,
       launchpadStyle,
+      launchpadIconScaleEnabled,
+      launchpadIconScaleSelectedKeys,
+      launchpadIconMaskOnlyKeys,
       brandColor,
       fontOverrideEnabled,
       fontFamily,
@@ -734,11 +1087,22 @@
           launchpadStyle,
           brandColor,
           syncedFontSettings,
-          syncedCustomCodeSettings
+          syncedCustomCodeSettings,
+          launchpadIconScaleEnabled,
+          launchpadIconScaleSelectedKeys,
+          launchpadIconMaskOnlyKeys
         );
       } else {
         currentFontSettings = syncedFontSettings;
         currentCustomCodeSettings = syncedCustomCodeSettings;
+        currentLaunchpadIconScaleEnabled = Boolean(launchpadIconScaleEnabled);
+        currentLaunchpadIconMaskOnlyKeys = normalizeLaunchpadKeyList(
+          launchpadIconMaskOnlyKeys
+        );
+        const maskOnlySet = new Set(currentLaunchpadIconMaskOnlyKeys);
+        currentLaunchpadIconScaleSelectedKeys = normalizeLaunchpadKeyList(
+          launchpadIconScaleSelectedKeys
+        ).filter((key) => !maskOnlySet.has(key));
       }
     }
   );
@@ -798,6 +1162,38 @@
           currentCustomCodeSettings = normalizeCustomCodeSettings(nextCustomCodeSettings);
         } else {
           updateCustomCodeSettings(nextCustomCodeSettings);
+        }
+      }
+
+      if (
+        changes.launchpadIconScaleEnabled ||
+        changes.launchpadIconScaleSelectedKeys ||
+        changes.launchpadIconMaskOnlyKeys
+      ) {
+        const nextEnabled = changes.launchpadIconScaleEnabled
+          ? Boolean(changes.launchpadIconScaleEnabled.newValue)
+          : currentLaunchpadIconScaleEnabled;
+        const nextSelectedKeys = changes.launchpadIconScaleSelectedKeys
+          ? changes.launchpadIconScaleSelectedKeys.newValue
+          : currentLaunchpadIconScaleSelectedKeys;
+        const nextMaskOnlyKeys = changes.launchpadIconMaskOnlyKeys
+          ? changes.launchpadIconMaskOnlyKeys.newValue
+          : currentLaunchpadIconMaskOnlyKeys;
+        if (!isInjectionActive) {
+          currentLaunchpadIconScaleEnabled = nextEnabled;
+          currentLaunchpadIconMaskOnlyKeys = normalizeLaunchpadKeyList(
+            nextMaskOnlyKeys
+          );
+          const maskOnlySet = new Set(currentLaunchpadIconMaskOnlyKeys);
+          currentLaunchpadIconScaleSelectedKeys = normalizeLaunchpadKeyList(
+            nextSelectedKeys
+          ).filter((key) => !maskOnlySet.has(key));
+        } else {
+          updateLaunchpadIconScaleEnabled(
+            nextEnabled,
+            nextSelectedKeys,
+            nextMaskOnlyKeys
+          );
         }
       }
       return;

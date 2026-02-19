@@ -546,3 +546,14 @@ body:not([theme-mode="dark"]) {
     background: transparent;
     background-image: none;
 }
+
+.fnos-launchpad-icon-box--processed,
+.fnos-launchpad-icon-box--scaled,
+.fnos-launchpad-icon-box--mask-only {
+    background: white;
+    mask-image: url(data:image/svg+xml;charset=utf-8;base64,PHN2ZyB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgdmlld0JveD0iMCAwIDI1NiAyNTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMjggMEMyNTAgMCAyNTYgNiAyNTYgMTI4QzI1NiAyNTAgMjUwIDI1NiAxMjggMjU2QzYgMjU2IDAgMjUwIDAgMTI4QzAgNiA2IDAgMTI4IDBaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K);
+    mask-size: cover;
+    height: 56px;
+    width: 56px;
+    padding: 5%;
+}
