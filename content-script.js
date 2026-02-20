@@ -966,6 +966,20 @@
     (document.head || document.documentElement).appendChild(script);
   }
 
+  function notifyInjectionTriggered(triggerReason = 'unknown') {
+    try {
+      chrome.runtime.sendMessage({
+        type: 'FNOS_INJECTION_TRIGGERED',
+        triggerReason,
+        origin: ORIGIN,
+        href: location.href,
+        timestamp: Date.now()
+      });
+    } catch (_error) {
+      // ignore background message failures
+    }
+  }
+
   function startInject(
     titlebarStyle,
     launchpadStyle,
@@ -974,7 +988,8 @@
     customCodeSettings,
     launchpadIconScaleEnabled,
     launchpadIconScaleSelectedKeys,
-    launchpadIconMaskOnlyKeys
+    launchpadIconMaskOnlyKeys,
+    triggerReason = 'unknown'
   ) {
     isInjectionActive = true;
     injectStyles(titlebarStyle, launchpadStyle);
@@ -987,6 +1002,7 @@
       launchpadIconMaskOnlyKeys
     );
     injectScript();
+    notifyInjectionTriggered(triggerReason);
   }
 
   function hasFnOSSignature() {
@@ -1069,7 +1085,8 @@
           message.launchpadIconScaleSelectedKeys ??
             currentLaunchpadIconScaleSelectedKeys,
           message.launchpadIconMaskOnlyKeys ??
-            currentLaunchpadIconMaskOnlyKeys
+            currentLaunchpadIconMaskOnlyKeys,
+          'popup_apply'
         );
 
         sendResponse({ applied: true });
@@ -1177,7 +1194,8 @@
           syncedCustomCodeSettings,
           launchpadIconScaleEnabled,
           launchpadIconScaleSelectedKeys,
-          launchpadIconMaskOnlyKeys
+          launchpadIconMaskOnlyKeys,
+          isWhitelisted ? 'auto_whitelist' : 'auto_suspected'
         );
       } else {
         currentFontSettings = syncedFontSettings;
