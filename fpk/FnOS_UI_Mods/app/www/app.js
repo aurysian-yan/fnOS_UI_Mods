@@ -4,6 +4,9 @@ const restoreBtn = document.getElementById('restore-btn');
 
 const statusIndex = document.getElementById('status-index');
 const statusBackup = document.getElementById('status-backup');
+const statusRootPill = document.getElementById('status-root-pill');
+const statusIndexPill = document.getElementById('status-index-pill');
+const statusBackupPill = document.getElementById('status-backup-pill');
 const statusIndexMeta = document.getElementById('status-index-meta');
 const statusBackupMeta = document.getElementById('status-backup-meta');
 
@@ -31,6 +34,10 @@ const modeTabs = document.querySelectorAll('.mode-tab');
 
 const brandColorEl = document.getElementById('brandColor');
 const resetBrandColorEl = document.getElementById('resetBrandColor');
+const basePresetEnabledEl = document.getElementById('basePresetEnabled');
+const colorSettingsEl = document.getElementById('colorSettings');
+const platformGroupEl = document.getElementById('platformGroup');
+const launchpadGroupEl = document.getElementById('launchpadGroup');
 const styleWindowsEl = document.getElementById('styleWindows');
 const styleMacEl = document.getElementById('styleMac');
 const styleClassicLaunchpadEl = document.getElementById('styleClassicLaunchpad');
@@ -48,6 +55,14 @@ const customCodeEnabledEl = document.getElementById('customCodeEnabled');
 const customCodeSettingsEl = document.getElementById('customCodeSettings');
 const customCssEl = document.getElementById('customCss');
 const customJsEl = document.getElementById('customJs');
+const presetCssSourceEl = document.getElementById('presetCssSource');
+const presetJsSourceEl = document.getElementById('presetJsSource');
+const presetCssFileInput = document.getElementById('preset-css-file');
+const presetJsFileInput = document.getElementById('preset-js-file');
+const presetCssFileHint = document.getElementById('preset-css-file-hint');
+const presetJsFileHint = document.getElementById('preset-js-file-hint');
+const presetCssPathInput = document.getElementById('preset-css-path');
+const presetJsPathInput = document.getElementById('preset-js-path');
 
 const PRESET_STORAGE_KEY = 'fnos-ui-mods:preset-config';
 const DEFAULT_BRAND_COLOR = '#0066ff';
@@ -55,6 +70,7 @@ const BRAND_LIGHTNESS_MIN = 0.3;
 const BRAND_LIGHTNESS_MAX = 0.7;
 
 const DEFAULT_PRESET_CONFIG = {
+  basePresetEnabled: true,
   titlebarStyle: 'windows',
   launchpadStyle: 'classic',
   launchpadIconScaleEnabled: false,
@@ -66,6 +82,10 @@ const DEFAULT_PRESET_CONFIG = {
   fontWeight: '',
   fontFeatureSettings: '',
   customCodeEnabled: false,
+  customCssMode: 'text',
+  customJsMode: 'text',
+  customCssPath: '',
+  customJsPath: '',
   customCss: '',
   customJs: '',
 };
@@ -101,6 +121,20 @@ function setMessage(text, type = '') {
   messageEl.className = `message ${type}`.trim();
 }
 
+function setStatusPillState(pillEl, state) {
+  if (!pillEl) return;
+  pillEl.classList.remove('is-ok', 'is-pending', 'is-error');
+  if (state === 'error') {
+    pillEl.classList.add('is-error');
+    return;
+  }
+  if (state === 'pending') {
+    pillEl.classList.add('is-pending');
+    return;
+  }
+  pillEl.classList.add('is-ok');
+}
+
 function formatTime(iso) {
   if (!iso) return '未知';
   try {
@@ -117,11 +151,45 @@ async function loadStatus() {
     if (!data.ok) throw new Error(data.message || '状态读取失败');
 
     const status = data.data;
-    statusIndex.textContent = status.indexExists ? '已找到' : '未找到';
-    statusBackup.textContent = status.backupExists ? '已存在' : '未创建';
+    const indexStatusText = status.indexExists ? '已找到' : '未找到';
+    const backupStatusText = status.backupExists ? '已存在' : '未创建';
+
+    statusIndex.textContent = indexStatusText;
+    statusBackup.textContent = backupStatusText;
+    if (statusRootPill) {
+      statusRootPill.title = 'ROOT权限：已获取';
+      statusRootPill.setAttribute('aria-label', 'ROOT权限：已获取');
+    }
+    if (statusIndexPill) {
+      statusIndexPill.title = `目标文件：${indexStatusText}`;
+      statusIndexPill.setAttribute('aria-label', `目标文件：${indexStatusText}`);
+    }
+    if (statusBackupPill) {
+      statusBackupPill.title = `备份文件：${backupStatusText}`;
+      statusBackupPill.setAttribute('aria-label', `备份文件：${backupStatusText}`);
+    }
+    setStatusPillState(statusIndexPill, status.indexExists ? 'ok' : 'error');
+    setStatusPillState(statusBackupPill, status.backupExists ? 'ok' : 'error');
     statusIndexMeta.textContent = `${status.indexPath} · ${status.indexMtime ? formatTime(status.indexMtime) : '无时间信息'}`;
     statusBackupMeta.textContent = `${status.backupPath} · ${status.backupMtime ? formatTime(status.backupMtime) : '无时间信息'}`;
   } catch (err) {
+    const errorDetail = err.message || '状态加载失败';
+    statusIndex.textContent = `检测失败：${errorDetail}`;
+    statusBackup.textContent = `检测失败：${errorDetail}`;
+    if (statusRootPill) {
+      statusRootPill.title = 'ROOT权限：已获取';
+      statusRootPill.setAttribute('aria-label', 'ROOT权限：已获取');
+    }
+    if (statusIndexPill) {
+      statusIndexPill.title = `目标文件：检测失败（${errorDetail}）`;
+      statusIndexPill.setAttribute('aria-label', `目标文件：检测失败（${errorDetail}）`);
+    }
+    if (statusBackupPill) {
+      statusBackupPill.title = `备份文件：检测失败（${errorDetail}）`;
+      statusBackupPill.setAttribute('aria-label', `备份文件：检测失败（${errorDetail}）`);
+    }
+    setStatusPillState(statusIndexPill, 'error');
+    setStatusPillState(statusBackupPill, 'error');
     setMessage(err.message || '状态加载失败', 'error');
   }
 }
@@ -482,6 +550,42 @@ async function getPayloadForSection(mode, fileInput, textArea, pathInput, label)
   return { text: '', path: '' };
 }
 
+function normalizePresetCustomMode(mode) {
+  if (mode === 'none' || mode === 'file' || mode === 'path' || mode === 'text') {
+    return mode;
+  }
+  return 'text';
+}
+
+function getPresetCustomMode(name) {
+  return normalizePresetCustomMode(getCheckedMode(`preset-${name}`));
+}
+
+function setPresetCustomMode(name, mode) {
+  const normalized = normalizePresetCustomMode(mode);
+  const target = document.querySelector(`input[name="preset-${name}-mode"][value="${normalized}"]`);
+  if (!target) return;
+  target.checked = true;
+}
+
+function updatePresetCustomModePanels(name) {
+  const container = name === 'css' ? presetCssSourceEl : presetJsSourceEl;
+  if (!container) return;
+  updateModePanels(container, getPresetCustomMode(name));
+}
+
+function wirePresetCustomModeGroup(name) {
+  const radios = document.querySelectorAll(`input[name="preset-${name}-mode"]`);
+  if (!radios.length) return;
+
+  radios.forEach((radio) => {
+    radio.addEventListener('change', () => {
+      updatePresetCustomModePanels(name);
+      savePresetConfig();
+    });
+  });
+}
+
 function hslToRgb(h, s, l) {
   if (s === 0) {
     const gray = Math.round(l * 255);
@@ -568,8 +672,11 @@ function getCurrentPresetConfig() {
   const titlebarStyle = styleMacEl && styleMacEl.checked ? 'mac' : 'windows';
   const launchpadStyle = styleSpotlightLaunchpadEl && styleSpotlightLaunchpadEl.checked ? 'spotlight' : 'classic';
   const brandColor = clampBrandLightness(brandColorEl ? brandColorEl.value : DEFAULT_BRAND_COLOR);
+  const customCssMode = getPresetCustomMode('css');
+  const customJsMode = getPresetCustomMode('js');
 
   return {
+    basePresetEnabled: Boolean(basePresetEnabledEl ? basePresetEnabledEl.checked : true),
     titlebarStyle,
     launchpadStyle,
     launchpadIconScaleEnabled: Boolean(launchpadIconScaleEnabledEl && launchpadIconScaleEnabledEl.checked),
@@ -581,6 +688,10 @@ function getCurrentPresetConfig() {
     fontWeight: fontWeightEl ? fontWeightEl.value.trim() : '',
     fontFeatureSettings: fontFeatureSettingsEl ? fontFeatureSettingsEl.value.trim() : '',
     customCodeEnabled: Boolean(customCodeEnabledEl && customCodeEnabledEl.checked),
+    customCssMode,
+    customJsMode,
+    customCssPath: presetCssPathInput ? presetCssPathInput.value.trim() : '',
+    customJsPath: presetJsPathInput ? presetJsPathInput.value.trim() : '',
     customCss: customCssEl ? customCssEl.value : '',
     customJs: customJsEl ? customJsEl.value : '',
   };
@@ -602,6 +713,14 @@ function updateCustomCodeSettingsVisibility() {
   customCodeSettingsEl.style.display = customCodeEnabledEl.checked ? 'grid' : 'none';
 }
 
+function updateBasePresetSettingsVisibility() {
+  const enabled = !basePresetEnabledEl || basePresetEnabledEl.checked;
+  [colorSettingsEl, platformGroupEl, launchpadGroupEl].forEach((sectionEl) => {
+    if (!sectionEl) return;
+    sectionEl.style.display = enabled ? '' : 'none';
+  });
+}
+
 function savePresetConfig() {
   try {
     const config = getCurrentPresetConfig();
@@ -616,6 +735,7 @@ function setPresetConfig(nextConfig) {
 
   const brand = clampBrandLightness(typeof merged.brandColor === 'string' ? merged.brandColor : DEFAULT_BRAND_COLOR);
   if (brandColorEl) brandColorEl.value = brand;
+  if (basePresetEnabledEl) basePresetEnabledEl.checked = Boolean(merged.basePresetEnabled);
 
   if (styleWindowsEl) styleWindowsEl.checked = merged.titlebarStyle !== 'mac';
   if (styleMacEl) styleMacEl.checked = merged.titlebarStyle === 'mac';
@@ -633,11 +753,18 @@ function setPresetConfig(nextConfig) {
   }
 
   if (customCodeEnabledEl) customCodeEnabledEl.checked = Boolean(merged.customCodeEnabled);
+  setPresetCustomMode('css', merged.customCssMode);
+  setPresetCustomMode('js', merged.customJsMode);
+  if (presetCssPathInput) presetCssPathInput.value = typeof merged.customCssPath === 'string' ? merged.customCssPath : '';
+  if (presetJsPathInput) presetJsPathInput.value = typeof merged.customJsPath === 'string' ? merged.customJsPath : '';
   if (customCssEl) customCssEl.value = typeof merged.customCss === 'string' ? merged.customCss : '';
   if (customJsEl) customJsEl.value = typeof merged.customJs === 'string' ? merged.customJs : '';
 
   updateFontSettingsVisibility();
   updateCustomCodeSettingsVisibility();
+  updateBasePresetSettingsVisibility();
+  updatePresetCustomModePanels('css');
+  updatePresetCustomModePanels('js');
   renderLaunchpadAppList();
 }
 
@@ -687,12 +814,39 @@ async function handleInject() {
 
     if (activeTab === 'preset') {
       const presetConfig = getCurrentPresetConfig();
+      let cssPath = '';
+      let jsPath = '';
+      let cssText = '';
+      let jsText = '';
+
+      if (presetConfig.customCodeEnabled) {
+        const cssMode = normalizePresetCustomMode(presetConfig.customCssMode);
+        const jsMode = normalizePresetCustomMode(presetConfig.customJsMode);
+
+        const [cssPayload, jsPayload] = await Promise.all([
+          getPayloadForSection(cssMode, presetCssFileInput, customCssEl, presetCssPathInput, '预设 CSS'),
+          getPayloadForSection(jsMode, presetJsFileInput, customJsEl, presetJsPathInput, '预设 JavaScript'),
+        ]);
+
+        cssText = cssPayload.text || '';
+        jsText = jsPayload.text || '';
+        cssPath = cssPayload.path || '';
+        jsPath = jsPayload.path || '';
+      }
+
+      presetConfig.customCss = cssText;
+      presetConfig.customJs = jsText;
+
       const res = await fetch(apiUrl('api/inject'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           injectMode: 'preset',
           presetConfig,
+          cssText,
+          jsText,
+          cssPath,
+          jsPath,
           assetBaseUrl: getPresetAssetBaseUrl(),
           injectDelaySec,
         }),
@@ -766,8 +920,10 @@ async function handleRestore() {
   }
 }
 
-cssFileInput.addEventListener('change', () => fileHint(cssFileInput, cssFileHint));
-jsFileInput.addEventListener('change', () => fileHint(jsFileInput, jsFileHint));
+cssFileInput?.addEventListener('change', () => fileHint(cssFileInput, cssFileHint));
+jsFileInput?.addEventListener('change', () => fileHint(jsFileInput, jsFileHint));
+presetCssFileInput?.addEventListener('change', () => fileHint(presetCssFileInput, presetCssFileHint));
+presetJsFileInput?.addEventListener('change', () => fileHint(presetJsFileInput, presetJsFileHint));
 
 injectBtn.addEventListener('click', handleInject);
 restoreBtn.addEventListener('click', handleRestore);
@@ -785,6 +941,10 @@ fontOverrideEnabledEl?.addEventListener('change', () => {
 });
 customCodeEnabledEl?.addEventListener('change', () => {
   updateCustomCodeSettingsVisibility();
+  savePresetConfig();
+});
+basePresetEnabledEl?.addEventListener('change', () => {
+  updateBasePresetSettingsVisibility();
   savePresetConfig();
 });
 launchpadIconScaleEnabledEl?.addEventListener('change', savePresetConfig);
@@ -824,6 +984,8 @@ resetBrandColorEl?.addEventListener('click', () => {
   fontFeatureSettingsEl,
   customCssEl,
   customJsEl,
+  presetCssPathInput,
+  presetJsPathInput,
 ].forEach((el) => {
   el?.addEventListener('change', savePresetConfig);
   el?.addEventListener('blur', savePresetConfig);
@@ -850,6 +1012,8 @@ requestThemeModeFromParent();
 
 wireModeGroup('css');
 wireModeGroup('js');
+wirePresetCustomModeGroup('css');
+wirePresetCustomModeGroup('js');
 loadPresetConfig();
 setActiveTab('preset');
 loadStatus();

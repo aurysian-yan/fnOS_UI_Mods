@@ -47,6 +47,7 @@ const DEFAULT_BRAND = '#0066ff';
 const BRAND_LIGHTNESS_MIN = 0.3;
 const BRAND_LIGHTNESS_MAX = 0.7;
 const DEFAULT_PRESET_CONFIG = {
+  basePresetEnabled: true,
   titlebarStyle: 'windows',
   launchpadStyle: 'classic',
   launchpadIconScaleEnabled: false,
@@ -889,6 +890,7 @@ function normalizePresetConfig(raw) {
   const merged = { ...DEFAULT_PRESET_CONFIG, ...(raw && typeof raw === 'object' ? raw : {}) };
 
   return {
+    basePresetEnabled: Boolean(merged.basePresetEnabled),
     titlebarStyle: merged.titlebarStyle === 'mac' ? 'mac' : 'windows',
     launchpadStyle: merged.launchpadStyle === 'spotlight' ? 'spotlight' : 'classic',
     launchpadIconScaleEnabled: Boolean(merged.launchpadIconScaleEnabled),
@@ -1033,10 +1035,15 @@ function buildPresetCss(presetConfig, templates) {
 
   const parts = [
     `/* ----- basic_mod.css ----- */\n${normalizeTextContent(templates.basicCss)}`,
-    `/* ----- ${presetConfig.titlebarStyle === 'mac' ? 'mac_titlebar_mod.css' : 'windows_titlebar_mod.css'} ----- */\n${normalizeTextContent(titlebarCss)}`,
-    `/* ----- ${presetConfig.launchpadStyle === 'spotlight' ? 'spotlight_launchpad_mod.css' : 'classic_launchpad_mod.css'} ----- */\n${normalizeTextContent(launchpadCss)}`,
-    `/* ----- generated.theme.css ----- */\n${normalizeTextContent(buildThemeCss(presetConfig.brandColor))}`,
   ];
+
+  if (presetConfig.basePresetEnabled) {
+    parts.push(
+      `/* ----- ${presetConfig.titlebarStyle === 'mac' ? 'mac_titlebar_mod.css' : 'windows_titlebar_mod.css'} ----- */\n${normalizeTextContent(titlebarCss)}`,
+      `/* ----- ${presetConfig.launchpadStyle === 'spotlight' ? 'spotlight_launchpad_mod.css' : 'classic_launchpad_mod.css'} ----- */\n${normalizeTextContent(launchpadCss)}`,
+      `/* ----- generated.theme.css ----- */\n${normalizeTextContent(buildThemeCss(presetConfig.brandColor))}`,
+    );
+  }
 
   const fontCss = buildFontCss(presetConfig);
   if (fontCss) {
@@ -1617,6 +1624,27 @@ async function injectCode({
 
   if (mode === 'preset') {
     const normalizedPresetConfig = normalizePresetConfig(presetConfig);
+
+    if (normalizedPresetConfig.customCodeEnabled) {
+      let customCss = normalizedPresetConfig.customCss;
+      let customJs = normalizedPresetConfig.customJs;
+
+      if (cssPath) {
+        customCss = await readTextFromPath(cssPath);
+      } else if (cssText) {
+        customCss = cssText;
+      }
+
+      if (jsPath) {
+        customJs = await readTextFromPath(jsPath);
+      } else if (jsText) {
+        customJs = jsText;
+      }
+
+      normalizedPresetConfig.customCss = normalizePresetString(customCss, 240000);
+      normalizedPresetConfig.customJs = normalizePresetString(customJs, 240000);
+    }
+
     const builtAssets = await buildPresetAssets(normalizedPresetConfig);
     presetAssetCssContent = builtAssets.cssContent;
     presetAssetJsContent = builtAssets.jsContent;
