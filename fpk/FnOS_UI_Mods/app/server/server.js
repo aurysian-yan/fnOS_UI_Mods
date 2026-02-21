@@ -7,6 +7,7 @@ const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const url = require('url');
+const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 
 const APP_DEST = process.env.TRIM_APPDEST || path.resolve(__dirname, '..');
@@ -29,6 +30,14 @@ const LAUNCHPAD_REPORT_FILE = process.env.TRIM_PKGVAR
 const PRESET_TEMPLATE_DIR = path.join(WWW_ROOT, 'assets', 'templates');
 const PREFECT_ICON_DIR = path.join(WWW_ROOT, 'prefect_icon');
 const PREFECT_ICON_MAP_FILE = path.join(PREFECT_ICON_DIR, 'icon-map.json');
+const AUTH_FILE = process.env.TRIM_PKGVAR
+  ? path.join(process.env.TRIM_PKGVAR, 'webui-auth.json')
+  : path.join(APP_DEST, 'server', 'webui-auth.json');
+const AUTH_MIN_PASSWORD_LEN = 8;
+const AUTH_MAX_PASSWORD_LEN = 128;
+const AUTH_PBKDF2_ITERATIONS = 200000;
+const AUTH_COOKIE_NAME = 'fnos_ui_mods_auth';
+const AUTH_SESSION_IDLE_TIMEOUT_SEC = 12 * 60 * 60;
 const PRESET_FILES = {
   js: path.join(PRESET_TEMPLATE_DIR, 'mod.js'),
   basicCss: path.join(PRESET_TEMPLATE_DIR, 'basic_mod.css'),
@@ -88,6 +97,9 @@ let launchpadAppsReport = {
   updatedAt: '',
   source: '',
 };
+let authCredential = null;
+let authLastCleanupAt = 0;
+const authSessions = new Map();
 let cliInstalledAppsCache = {
   fetchedAt: 0,
   items: [],
@@ -109,6 +121,205 @@ function loadLaunchpadAppsReport() {
 }
 
 loadLaunchpadAppsReport();
+
+function encodeBase64Url(buffer) {
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function hashAuthPassword(password, salt, iterations) {
+  return crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256');
+}
+
+function loadAuthCredential() {
+  try {
+    const raw = fs.readFileSync(AUTH_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      authCredential = null;
+      return;
+    }
+
+    const saltHex = typeof parsed.salt === 'string' ? parsed.salt.trim() : '';
+    const hashHex = typeof parsed.hash === 'string' ? parsed.hash.trim() : '';
+    const iterations = Number(parsed.iterations || AUTH_PBKDF2_ITERATIONS);
+    if (!saltHex || !hashHex || !Number.isFinite(iterations) || iterations <= 0) {
+      authCredential = null;
+      return;
+    }
+
+    const salt = Buffer.from(saltHex, 'hex');
+    const hash = Buffer.from(hashHex, 'hex');
+    if (!salt.length || !hash.length) {
+      authCredential = null;
+      return;
+    }
+
+    authCredential = { salt, hash, iterations };
+  } catch (_) {
+    authCredential = null;
+  }
+}
+
+async function saveAuthCredential(salt, hash, iterations) {
+  await fsp.mkdir(path.dirname(AUTH_FILE), { recursive: true });
+  const payload = JSON.stringify({
+    salt: salt.toString('hex'),
+    hash: hash.toString('hex'),
+    iterations,
+  });
+  const tmpFile = `${AUTH_FILE}.tmp`;
+  await fsp.writeFile(tmpFile, payload, 'utf8');
+  await fsp.chmod(tmpFile, 0o600).catch(() => {});
+  await fsp.rename(tmpFile, AUTH_FILE);
+}
+
+function isAuthConfigured() {
+  return Boolean(authCredential && authCredential.salt && authCredential.hash);
+}
+
+function normalizeAuthPasswordFromBody(body) {
+  const password = body && typeof body.password === 'string' ? body.password : '';
+  if (password.length < AUTH_MIN_PASSWORD_LEN) {
+    return { password: null, error: `密码长度不能小于 ${AUTH_MIN_PASSWORD_LEN} 位` };
+  }
+  if (password.length > AUTH_MAX_PASSWORD_LEN) {
+    return { password: null, error: `密码长度不能超过 ${AUTH_MAX_PASSWORD_LEN} 位` };
+  }
+  return { password, error: '' };
+}
+
+async function setupAuthPassword(password) {
+  if (isAuthConfigured()) return false;
+  const salt = crypto.randomBytes(16);
+  const hash = hashAuthPassword(password, salt, AUTH_PBKDF2_ITERATIONS);
+  await saveAuthCredential(salt, hash, AUTH_PBKDF2_ITERATIONS);
+  authCredential = { salt, hash, iterations: AUTH_PBKDF2_ITERATIONS };
+  return true;
+}
+
+function verifyAuthPassword(password) {
+  if (!isAuthConfigured()) return false;
+  const digest = hashAuthPassword(password, authCredential.salt, authCredential.iterations);
+  if (digest.length !== authCredential.hash.length) return false;
+  return crypto.timingSafeEqual(digest, authCredential.hash);
+}
+
+function cleanupAuthSessions() {
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (nowSec - authLastCleanupAt < 60) return;
+  authLastCleanupAt = nowSec;
+
+  for (const [token, session] of authSessions.entries()) {
+    if (!session || typeof session.lastActiveSec !== 'number') {
+      authSessions.delete(token);
+      continue;
+    }
+    if (nowSec - session.lastActiveSec > AUTH_SESSION_IDLE_TIMEOUT_SEC) {
+      authSessions.delete(token);
+    }
+  }
+}
+
+function createAuthSession() {
+  const token = encodeBase64Url(crypto.randomBytes(32));
+  const nowSec = Math.floor(Date.now() / 1000);
+  authSessions.set(token, {
+    createdAtSec: nowSec,
+    lastActiveSec: nowSec,
+  });
+  return token;
+}
+
+function validateAuthSession(token) {
+  if (typeof token !== 'string' || !token.trim()) return false;
+  cleanupAuthSessions();
+  const session = authSessions.get(token);
+  if (!session) return false;
+  session.lastActiveSec = Math.floor(Date.now() / 1000);
+  return true;
+}
+
+function destroyAuthSession(token) {
+  if (typeof token !== 'string' || !token) return;
+  authSessions.delete(token);
+}
+
+function parseCookieHeader(rawCookie) {
+  const result = {};
+  if (typeof rawCookie !== 'string' || !rawCookie.trim()) return result;
+  const parts = rawCookie.split(';');
+  parts.forEach((part) => {
+    const index = part.indexOf('=');
+    if (index <= 0) return;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) return;
+    result[key] = value;
+  });
+  return result;
+}
+
+function getCookieValue(req, name) {
+  if (!req || !req.headers) return null;
+  const raw = req.headers.cookie;
+  const cookies = parseCookieHeader(Array.isArray(raw) ? raw.join('; ') : raw);
+  const value = cookies[name];
+  return typeof value === 'string' && value ? value : null;
+}
+
+function getHeaderAuthToken(req) {
+  if (!req || !req.headers) return null;
+  const raw = req.headers['x-auth-token'];
+  const token = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof token !== 'string') return null;
+  const normalized = token.trim();
+  if (!normalized || normalized.length > 512) return null;
+  return normalized;
+}
+
+function buildAuthCookie(token) {
+  return `${AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_SESSION_IDLE_TIMEOUT_SEC}`;
+}
+
+function buildClearAuthCookie() {
+  return `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
+
+function getAuthStateFromRequest(req) {
+  const headerToken = getHeaderAuthToken(req);
+  if (validateAuthSession(headerToken)) {
+    return { authenticated: true, token: headerToken, source: 'header' };
+  }
+
+  const cookieToken = getCookieValue(req, AUTH_COOKIE_NAME);
+  if (validateAuthSession(cookieToken)) {
+    return { authenticated: true, token: cookieToken, source: 'cookie' };
+  }
+
+  if (cookieToken) {
+    return { authenticated: false, token: cookieToken, source: 'cookie' };
+  }
+  if (headerToken) {
+    return { authenticated: false, token: headerToken, source: 'header' };
+  }
+  return { authenticated: false, token: null, source: null };
+}
+
+function requireAuth(req, res) {
+  const authState = getAuthStateFromRequest(req);
+  if (authState.authenticated) return true;
+
+  const headers = {};
+  if (authState.source === 'cookie' && authState.token) {
+    headers['Set-Cookie'] = buildClearAuthCookie();
+  }
+  sendJson(res, 401, { error: 'unauthorized' }, headers);
+  return false;
+}
 
 function detectNamespace() {
   try {
@@ -160,8 +371,10 @@ function detectAt() {
 detectNamespace();
 detectNsenter();
 detectAt();
+loadAuthCredential();
 log(`Namespace mnt: self=${mntSelf || 'unknown'} init=${mntInit || 'unknown'} nsenter=${nsenterAvailable} at=${atAvailable}`);
 log(`Preset asset target(store): css=${PRESET_CSS_TARGET} js=${PRESET_JS_TARGET}`);
+log(`WebUI auth: file=${AUTH_FILE} configured=${isAuthConfigured()}`);
 
 function shellQuote(value) {
   if (!value) return "''";
@@ -338,17 +551,19 @@ function log(msg) {
   }
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
+    ...extraHeaders,
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
   });
   res.end(body);
 }
 
-function sendText(res, status, text) {
+function sendText(res, status, text, extraHeaders = {}) {
   res.writeHead(status, {
+    ...extraHeaders,
     'Content-Type': 'text/plain; charset=utf-8',
     'Content-Length': Buffer.byteLength(text),
   });
@@ -1881,11 +2096,16 @@ async function handlePresetAsset(req, res, pathname) {
   const target = pathname === '/preset/mod.css' ? PRESET_CSS_TARGET : PRESET_JS_TARGET;
   try {
     const data = await fsp.readFile(target);
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': mimeFor(target),
       'Content-Length': data.length,
       'Cache-Control': 'no-store',
-    });
+    };
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
     res.end(data);
   } catch (err) {
     return sendText(res, 404, 'Not Found');
@@ -1896,6 +2116,10 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url || '/', true);
   const pathname = parsedUrl.pathname || '/';
   const isLaunchpadApi = pathname === '/api/launchpad/apps';
+  const isAuthApi = pathname === '/api/auth/state'
+    || pathname === '/api/auth/setup'
+    || pathname === '/api/auth/login'
+    || pathname === '/api/auth/logout';
 
   if (isLaunchpadApi) {
     setCorsHeaders(res);
@@ -1906,12 +2130,91 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (req.method === 'GET' && (pathname === '/preset/mod.css' || pathname === '/preset/mod.js')) {
+  // Preset assets are intentionally public so injected tags can always load.
+  if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/preset/mod.css' || pathname === '/preset/mod.js')) {
     return handlePresetAsset(req, res, pathname);
   }
 
   if (pathname.startsWith('/api/')) {
+    const allowAnonymousApi = isAuthApi || (req.method === 'POST' && pathname === '/api/launchpad/apps');
+    if (!allowAnonymousApi && !requireAuth(req, res)) {
+      return;
+    }
+
     try {
+      if (req.method === 'GET' && pathname === '/api/auth/state') {
+        const authState = getAuthStateFromRequest(req);
+        return sendJson(res, 200, {
+          ok: true,
+          configured: isAuthConfigured(),
+          authenticated: authState.authenticated,
+        });
+      }
+
+      if (req.method === 'POST' && pathname === '/api/auth/setup') {
+        if (isAuthConfigured()) {
+          return sendJson(res, 409, { ok: false, error: 'password already configured' });
+        }
+
+        const body = await readJsonBody(req);
+        const { password, error } = normalizeAuthPasswordFromBody(body);
+        if (!password) {
+          return sendJson(res, 400, { ok: false, error: error || 'invalid password' });
+        }
+
+        const created = await setupAuthPassword(password);
+        if (!created) {
+          return sendJson(res, 409, { ok: false, error: 'password already configured' });
+        }
+
+        const token = createAuthSession();
+        return sendJson(
+          res,
+          200,
+          { ok: true, configured: true, authenticated: true, authToken: token },
+          { 'Set-Cookie': buildAuthCookie(token) },
+        );
+      }
+
+      if (req.method === 'POST' && pathname === '/api/auth/login') {
+        if (!isAuthConfigured()) {
+          return sendJson(res, 409, { ok: false, error: 'password is not configured' });
+        }
+
+        const body = await readJsonBody(req);
+        const password = body && typeof body.password === 'string' ? body.password : '';
+        if (!password) {
+          return sendJson(res, 400, { ok: false, error: 'invalid password' });
+        }
+
+        if (!verifyAuthPassword(password)) {
+          return sendJson(res, 401, { ok: false, error: 'invalid password' });
+        }
+
+        const token = createAuthSession();
+        return sendJson(
+          res,
+          200,
+          { ok: true, authenticated: true, authToken: token },
+          { 'Set-Cookie': buildAuthCookie(token) },
+        );
+      }
+
+      if (req.method === 'POST' && pathname === '/api/auth/logout') {
+        const cookieToken = getCookieValue(req, AUTH_COOKIE_NAME);
+        const headerToken = getHeaderAuthToken(req);
+        destroyAuthSession(cookieToken);
+        if (headerToken && headerToken !== cookieToken) {
+          destroyAuthSession(headerToken);
+        }
+        return sendJson(
+          res,
+          200,
+          { ok: true },
+          { 'Set-Cookie': buildClearAuthCookie() },
+        );
+      }
+
       if (req.method === 'GET' && pathname === '/api/status') {
         const status = await getStatus();
         return sendJson(res, 200, { ok: true, data: status });

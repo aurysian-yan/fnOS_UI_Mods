@@ -63,11 +63,23 @@ const presetCssFileHint = document.getElementById('preset-css-file-hint');
 const presetJsFileHint = document.getElementById('preset-js-file-hint');
 const presetCssPathInput = document.getElementById('preset-css-path');
 const presetJsPathInput = document.getElementById('preset-js-path');
+const authScreenEl = document.getElementById('authScreen');
+const authHintEl = document.getElementById('authHint');
+const authErrorEl = document.getElementById('authError');
+const setupFormEl = document.getElementById('setupForm');
+const loginFormEl = document.getElementById('loginForm');
+const setupPasswordEl = document.getElementById('setupPassword');
+const setupPassword2El = document.getElementById('setupPassword2');
+const loginPasswordEl = document.getElementById('loginPassword');
+const appShellEl = document.getElementById('appShell');
+const logoutBtn = document.getElementById('logout-btn');
 
 const PRESET_STORAGE_KEY = 'fnos-ui-mods:preset-config';
 const DEFAULT_BRAND_COLOR = '#0066ff';
 const BRAND_LIGHTNESS_MIN = 0.3;
 const BRAND_LIGHTNESS_MAX = 0.7;
+const AUTH_MIN_PASSWORD_LEN = 8;
+const AUTH_TOKEN_STORAGE_KEY = 'fnos_ui_mods_auth_token';
 
 const DEFAULT_PRESET_CONFIG = {
   basePresetEnabled: true,
@@ -110,10 +122,110 @@ let activeTab = 'preset';
 let launchpadAppItems = [];
 let launchpadIconScaleSelectedKeys = [];
 let launchpadPollTimer = null;
+let authToken = loadAuthToken();
+let authenticated = false;
+
+function loadAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function setAuthToken(token) {
+  authToken = typeof token === 'string' ? token : '';
+  try {
+    if (authToken) {
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
+function setAuthError(text) {
+  if (!authErrorEl) return;
+  authErrorEl.textContent = text || '';
+}
+
+function setAuthenticated(next) {
+  authenticated = Boolean(next);
+  if (logoutBtn) {
+    logoutBtn.classList.toggle('hidden', !authenticated);
+  }
+}
+
+function showAuth(mode, hintText = '') {
+  if (authScreenEl) authScreenEl.classList.remove('hidden');
+  if (appShellEl) appShellEl.classList.add('hidden');
+  if (setupFormEl) setupFormEl.classList.toggle('hidden', mode !== 'setup');
+  if (loginFormEl) loginFormEl.classList.toggle('hidden', mode !== 'login');
+  if (authHintEl) authHintEl.textContent = hintText;
+  setAuthError('');
+  setAuthenticated(false);
+
+  if (mode === 'setup') {
+    if (setupPasswordEl) setupPasswordEl.value = '';
+    if (setupPassword2El) setupPassword2El.value = '';
+    setupPasswordEl?.focus();
+    return;
+  }
+
+  if (loginPasswordEl) loginPasswordEl.value = '';
+  loginPasswordEl?.focus();
+}
+
+function showAppShell() {
+  if (authScreenEl) authScreenEl.classList.add('hidden');
+  if (appShellEl) appShellEl.classList.remove('hidden');
+  setAuthenticated(true);
+}
 
 function apiUrl(path) {
   const cleanPath = path.replace(/^\/+/, '');
   return new URL(cleanPath, window.location.href).toString();
+}
+
+async function requestJson(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (authToken && !headers.has('X-Auth-Token')) {
+    headers.set('X-Auth-Token', authToken);
+  }
+
+  const response = await fetch(apiUrl(path), {
+    cache: 'no-store',
+    credentials: 'same-origin',
+    ...options,
+    headers,
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (_) {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      setAuthToken('');
+    }
+    const message = payload.error || payload.message || `Request failed: ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+
+  return payload;
+}
+
+function handleUnauthorized(hint = '会话已失效，请重新输入访问密码。') {
+  setAuthToken('');
+  setMessage('');
+  showAuth('login', hint);
 }
 
 function setMessage(text, type = '') {
@@ -146,8 +258,7 @@ function formatTime(iso) {
 
 async function loadStatus() {
   try {
-    const res = await fetch(apiUrl('api/status'));
-    const data = await res.json();
+    const data = await requestJson('api/status');
     if (!data.ok) throw new Error(data.message || '状态读取失败');
 
     const status = data.data;
@@ -173,6 +284,10 @@ async function loadStatus() {
     statusIndexMeta.textContent = `${status.indexPath} · ${status.indexMtime ? formatTime(status.indexMtime) : '无时间信息'}`;
     statusBackupMeta.textContent = `${status.backupPath} · ${status.backupMtime ? formatTime(status.backupMtime) : '无时间信息'}`;
   } catch (err) {
+    if (err && err.status === 401) {
+      handleUnauthorized();
+      return;
+    }
     const errorDetail = err.message || '状态加载失败';
     statusIndex.textContent = `检测失败：${errorDetail}`;
     statusBackup.textContent = `检测失败：${errorDetail}`;
@@ -467,8 +582,7 @@ function renderLaunchpadAppList() {
 
 async function loadLaunchpadAppItems() {
   try {
-    const res = await fetch(apiUrl('api/launchpad/apps'), { cache: 'no-store' });
-    const payload = await res.json();
+    const payload = await requestJson('api/launchpad/apps');
     if (!payload.ok) {
       throw new Error(payload.message || '启动台应用列表读取失败');
     }
@@ -490,7 +604,11 @@ async function loadLaunchpadAppItems() {
     }
 
     setLaunchpadAppListStatus('应用列表：等待启动台页面上报（打开启动台后自动同步）');
-  } catch (_) {
+  } catch (err) {
+    if (err && err.status === 401) {
+      handleUnauthorized();
+      return;
+    }
     setLaunchpadAppListStatus('应用列表：读取失败，稍后自动重试');
   }
 }
@@ -498,6 +616,7 @@ async function loadLaunchpadAppItems() {
 function ensureLaunchpadPolling() {
   if (launchpadPollTimer) return;
   launchpadPollTimer = window.setInterval(() => {
+    if (!authenticated) return;
     if (activeTab !== 'preset') return;
     loadLaunchpadAppItems().catch(() => {});
   }, 3000);
@@ -779,7 +898,7 @@ function setActiveTab(tab) {
     panel.classList.toggle('is-active', selected);
   });
 
-  if (activeTab === 'preset') {
+  if (authenticated && activeTab === 'preset') {
     loadLaunchpadAppItems().catch(() => {});
   }
 }
@@ -822,7 +941,7 @@ async function handleInject() {
       presetConfig.customCss = cssText;
       presetConfig.customJs = jsText;
 
-      const res = await fetch(apiUrl('api/inject'), {
+      const data = await requestJson('api/inject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -836,8 +955,6 @@ async function handleInject() {
           injectDelaySec,
         }),
       });
-
-      const data = await res.json();
       if (!data.ok) throw new Error(data.message || '注入失败');
       setMessage(data.message || '注入成功', 'ok');
       savePresetConfig();
@@ -857,7 +974,7 @@ async function handleInject() {
       getPayloadForSection(jsMode, jsFileInput, jsTextArea, jsPathInput, 'JS'),
     ]);
 
-    const res = await fetch(apiUrl('api/inject'), {
+    const data = await requestJson('api/inject', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -869,13 +986,15 @@ async function handleInject() {
         injectDelaySec,
       }),
     });
-
-    const data = await res.json();
     if (!data.ok) throw new Error(data.message || '注入失败');
 
     setMessage(data.message || '注入成功', 'ok');
     await loadStatus();
   } catch (err) {
+    if (err && err.status === 401) {
+      handleUnauthorized();
+      return;
+    }
     setMessage(err.message || '注入失败', 'error');
   } finally {
     injectBtn.disabled = false;
@@ -892,18 +1011,107 @@ async function handleRestore() {
   restoreBtn.disabled = true;
 
   try {
-    const res = await fetch(apiUrl('api/restore'), { method: 'POST' });
-    const data = await res.json();
+    const data = await requestJson('api/restore', { method: 'POST' });
     if (!data.ok) throw new Error(data.message || '还原失败');
     setMessage(data.message || '还原完成', 'ok');
     await loadStatus();
   } catch (err) {
+    if (err && err.status === 401) {
+      handleUnauthorized();
+      return;
+    }
     setMessage(err.message || '还原失败', 'error');
   } finally {
     injectBtn.disabled = false;
     restoreBtn.disabled = false;
   }
 }
+
+async function bootstrapAuthenticatedUi() {
+  showAppShell();
+  setAuthError('');
+  await loadStatus();
+  if (activeTab === 'preset') {
+    await loadLaunchpadAppItems();
+  }
+  ensureLaunchpadPolling();
+}
+
+async function loadAuthState() {
+  const state = await requestJson('api/auth/state');
+  if (!state.configured) {
+    setAuthToken('');
+    showAuth('setup', `首次使用请先设置访问密码（至少 ${AUTH_MIN_PASSWORD_LEN} 位）。`);
+    return;
+  }
+
+  if (!state.authenticated) {
+    setAuthToken('');
+    showAuth('login', '请输入你之前设置的访问密码。');
+    return;
+  }
+
+  await bootstrapAuthenticatedUi();
+}
+
+setupFormEl?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!setupPasswordEl || !setupPassword2El) return;
+  const password = setupPasswordEl.value;
+  const password2 = setupPassword2El.value;
+
+  if (password.length < AUTH_MIN_PASSWORD_LEN) {
+    setAuthError(`密码长度不能小于 ${AUTH_MIN_PASSWORD_LEN} 位`);
+    return;
+  }
+  if (password !== password2) {
+    setAuthError('两次输入密码不一致');
+    return;
+  }
+
+  try {
+    const payload = await requestJson('api/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    setAuthToken(payload.authToken || '');
+    await bootstrapAuthenticatedUi();
+  } catch (error) {
+    setAuthError(error.message || '设置密码失败');
+  }
+});
+
+loginFormEl?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!loginPasswordEl) return;
+  const password = loginPasswordEl.value;
+  if (!password) {
+    setAuthError('请输入访问密码');
+    return;
+  }
+
+  try {
+    const payload = await requestJson('api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    setAuthToken(payload.authToken || '');
+    await bootstrapAuthenticatedUi();
+  } catch (error) {
+    setAuthError(error.message || '登录失败');
+  }
+});
+
+logoutBtn?.addEventListener('click', async () => {
+  try {
+    await requestJson('api/auth/logout', { method: 'POST' });
+  } catch (_) {
+    // logout is best-effort
+  }
+  handleUnauthorized('已退出登录。请输入访问密码继续。');
+});
 
 cssFileInput?.addEventListener('change', () => fileHint(cssFileInput, cssFileHint));
 jsFileInput?.addEventListener('change', () => fileHint(jsFileInput, jsFileHint));
@@ -1001,6 +1209,8 @@ wirePresetCustomModeGroup('css');
 wirePresetCustomModeGroup('js');
 loadPresetConfig();
 setActiveTab('preset');
-loadStatus();
-loadLaunchpadAppItems().catch(() => {});
 ensureLaunchpadPolling();
+loadAuthState().catch((error) => {
+  showAuth('login', '无法获取鉴权状态，请稍后重试。');
+  setAuthError(error.message || '鉴权状态读取失败');
+});
