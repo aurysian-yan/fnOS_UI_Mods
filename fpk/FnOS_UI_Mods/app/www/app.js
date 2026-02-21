@@ -409,8 +409,7 @@ function normalizeLaunchpadAppItems(items) {
     if (!key) return;
     const titleRaw = typeof item.title === 'string' ? item.title.trim().slice(0, 200) : '';
     const title = titleRaw || key.split('/').pop() || key;
-    const iconSrc = typeof item.iconSrc === 'string' ? item.iconSrc.trim() : '';
-    keyMap.set(key, { key, title, iconSrc });
+    keyMap.set(key, { key, title });
   });
   return Array.from(keyMap.values());
 }
@@ -431,7 +430,7 @@ function renderLaunchpadAppList() {
   const selectedSet = new Set(launchpadIconScaleSelectedKeys);
   const fragment = document.createDocumentFragment();
 
-  launchpadAppItems.forEach(({ key, title, iconSrc }) => {
+  launchpadAppItems.forEach(({ key, title }) => {
     const itemEl = document.createElement('label');
     itemEl.className = 'launchpad-app-item';
 
@@ -446,29 +445,15 @@ function renderLaunchpadAppList() {
     const titleRowEl = document.createElement('span');
     titleRowEl.className = 'launchpad-app-title-row';
 
-    const iconEl = document.createElement('img');
-    iconEl.className = 'launchpad-app-icon';
-    iconEl.alt = '';
-    if (iconSrc) {
-      iconEl.src = iconSrc;
-      iconEl.referrerPolicy = 'no-referrer';
-      iconEl.addEventListener('error', () => {
-        iconEl.style.visibility = 'hidden';
-      });
-    } else {
-      iconEl.style.visibility = 'hidden';
-    }
-
     const titleEl = document.createElement('span');
     titleEl.textContent = title;
+
+    titleRowEl.appendChild(titleEl);
+    textWrapEl.appendChild(titleRowEl);
 
     const keyEl = document.createElement('span');
     keyEl.className = 'launchpad-app-key';
     keyEl.textContent = key;
-
-    titleRowEl.appendChild(iconEl);
-    titleRowEl.appendChild(titleEl);
-    textWrapEl.appendChild(titleRowEl);
     textWrapEl.appendChild(keyEl);
 
     itemEl.appendChild(checkboxEl);
