@@ -17,7 +17,8 @@
   />
 </picture>
 </h1>
-<p>为 FnOS 的 UI 增加平滑圆角、毛玻璃背景及更多的悬停动画</p>
+<p>为 FnOS 的 UI 增加平滑圆角、亚克力背景及更多的动画效果</p>
+<p>本项目多数非样式表内容由 Codex、Gemini 等 LLM 编写。</p>
 <img width="1944" height="1104" alt="截屏" src="https://github.com/user-attachments/assets/2c8badad-ad59-480c-b46d-19cf1dfd98f5" />
 <p>*图中字体为 Inter + OPPO Sans 4.0，项目内不提供相关字体。</p>
 </div>
