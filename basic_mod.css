@@ -175,45 +175,6 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     cursor: default;
 }
 
-/* ========= 桌面图标 ========= */
-
-.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 {
-    height: clamp(90px, calc((100vh - 40px) / 8), 170px);
-    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18);
-}
-
-@media (max-height: 780px) {
-    .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 {
-        height: clamp(90px, calc((100vh - 40px) / 6), 150px) !important;
-    }
-}
-
-.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .box-border.size-\[80px\].p-\[15\%\].\!h-\[50px\].\!w-\[50px\].\!p-0 {
-    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
-    filter: drop-shadow(0 2px 15.1px 0 rgba(0, 0, 0, 0.40)) !important;
-}
-
-.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 {
-    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
-}
-
-.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4:hover {
-    transform: translateY(-6px);
-    gap: .9rem;
-
-    >div:first-of-type {
-        transform: rotate(6deg);
-    }
-}
-
-.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .line-clamp-1.max-w-\[112px\].shrink-0.whitespace-normal.text-center.align-top.text-\[14px\].font-bold.leading-\[16px\].text-white {
-    text-shadow: rgba(0, 0, 0, 0.4) 0px 0px 10px, rgba(0, 0, 0, 0.75) 0px 0px 20px;
-    overflow: visible;
-}
-
-.py-base-loose .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4>div {
-    filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.4));
-}
 
 /* ========= 菜单 ========= */
 

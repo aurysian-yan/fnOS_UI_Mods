@@ -8,6 +8,7 @@
   const latestCommitLinkEl = document.getElementById("latestCommitLink");
   const siteToggleEl = document.getElementById("siteToggle");
   const autoSuspectedFnOSEl = document.getElementById("autoSuspectedFnOS");
+  const basePresetEnabledEl = document.getElementById("basePresetEnabled");
   const styleWindowsEl = document.getElementById("styleWindows");
   const styleMacEl = document.getElementById("styleMac");
   const styleClassicLaunchpadEl = document.getElementById("styleClassicLaunchpad");
@@ -15,10 +16,18 @@
   const launchpadIconScaleEnabledEl = document.getElementById(
     "launchpadIconScaleEnabled"
   );
+  const desktopIconLayoutModeEl = document.getElementById(
+    "desktopIconLayoutMode"
+  );
+  const desktopIconLayoutEnabledEl = document.getElementById(
+    "desktopIconLayoutEnabled"
+  );
+  const desktopIconPerColumnEl = document.getElementById("desktopIconPerColumn");
   const launchpadAppListStatusEl = document.getElementById("launchpadAppListStatus");
   const launchpadAppListEl = document.getElementById("launchpadAppList");
   const platformGroupEl = document.getElementById("platformGroup");
   const launchpadGroupEl = document.getElementById("launchpadGroup");
+  const colorSettingsEl = document.getElementById("colorSettings");
   const brandColorEl = document.getElementById("brandColor");
   const resetBrandColorEl = document.getElementById("resetBrandColor");
   const brandColorTextEl = document.getElementById("brandColorText");
@@ -46,6 +55,10 @@
   const DEFAULT_BRAND_COLOR = "#0066ff";
   const BRAND_LIGHTNESS_MIN = 0.3;
   const BRAND_LIGHTNESS_MAX = 0.7;
+  const DESKTOP_ICON_PER_COLUMN_DEFAULT = 8;
+  const DESKTOP_ICON_PER_COLUMN_MIN = 4;
+  const DESKTOP_ICON_PER_COLUMN_MAX = 16;
+  const DESKTOP_ICON_LAYOUT_MODE_DEFAULT = "adaptive";
 
   const DEFAULT_FONT_FACE_NAME = "FnOSCustomFont";
   const FONT_LOCAL_DATA_KEY = "customFontDataUrl";
@@ -153,9 +166,31 @@
   function updatePlatformOptionsVisibility() {
     const hasAnyInjectionOptionOn =
       siteToggleEl.checked || autoSuspectedFnOSEl.checked;
-    const display = hasAnyInjectionOptionOn ? "block" : "none";
+    const basePresetEnabled = !basePresetEnabledEl || basePresetEnabledEl.checked;
+    const display = hasAnyInjectionOptionOn && basePresetEnabled ? "block" : "none";
     platformGroupEl.style.display = display;
     launchpadGroupEl.style.display = display;
+  }
+
+  function updateBasePresetSettingsVisibility() {
+    const enabled = !basePresetEnabledEl || basePresetEnabledEl.checked;
+    if (colorSettingsEl) {
+      colorSettingsEl.style.display = enabled ? "block" : "none";
+    }
+    updatePlatformOptionsVisibility();
+  }
+
+  function updateDesktopIconPerColumnControlState() {
+    const desktopIconLayoutEnabled = Boolean(
+      desktopIconLayoutEnabledEl?.checked ?? true
+    );
+    if (desktopIconLayoutModeEl) {
+      desktopIconLayoutModeEl.disabled = !desktopIconLayoutEnabled;
+    }
+    if (!desktopIconPerColumnEl || !desktopIconLayoutModeEl) return;
+    desktopIconPerColumnEl.disabled =
+      !desktopIconLayoutEnabled ||
+      normalizeDesktopIconLayoutMode(desktopIconLayoutModeEl.value) !== "fixed";
   }
 
   function updateFontSettingsVisibility() {
@@ -918,6 +953,32 @@
     syncSwitchAccent(next);
   }
 
+  function normalizeDesktopIconPerColumn(value) {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    if (!Number.isFinite(parsed)) return DESKTOP_ICON_PER_COLUMN_DEFAULT;
+    return Math.max(
+      DESKTOP_ICON_PER_COLUMN_MIN,
+      Math.min(DESKTOP_ICON_PER_COLUMN_MAX, parsed)
+    );
+  }
+
+  function normalizeDesktopIconLayoutMode(value, legacyEnabled) {
+    const normalized =
+      typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (normalized === "adaptive" || normalized === "fixed") {
+      return normalized;
+    }
+    if (typeof legacyEnabled === "boolean") {
+      return legacyEnabled ? "fixed" : "adaptive";
+    }
+    return DESKTOP_ICON_LAYOUT_MODE_DEFAULT;
+  }
+
+  function setDesktopIconPerColumnUI(value) {
+    if (!desktopIconPerColumnEl) return;
+    desktopIconPerColumnEl.value = String(normalizeDesktopIconPerColumn(value));
+  }
+
   function normalizeText(value, maxLength = 300) {
     if (typeof value !== "string") return "";
     return value.trim().slice(0, maxLength);
@@ -1457,27 +1518,41 @@
       siteToggleEl.checked || (autoSuspectedFnOSEl.checked && isFnOSWebUi);
     if (!shouldInject) return;
 
+    const basePresetEnabled = Boolean(basePresetEnabledEl?.checked ?? true);
     const titlebarStyle = styleMacEl.checked ? "mac" : "windows";
     const launchpadStyle = styleSpotlightLaunchpadEl.checked
       ? "spotlight"
       : "classic";
+    const desktopIconLayoutEnabled = Boolean(
+      desktopIconLayoutEnabledEl?.checked ?? true
+    );
+    const desktopIconLayoutMode = normalizeDesktopIconLayoutMode(
+      desktopIconLayoutModeEl?.value
+    );
     const launchpadIconScaleEnabled = Boolean(launchpadIconScaleEnabledEl?.checked);
     const launchpadIconScaleSelected = launchpadIconScaleSelectedKeys.slice();
     const launchpadIconMaskOnlySelected = launchpadIconMaskOnlyKeys.slice();
     const launchpadIconRedrawSelected = launchpadIconRedrawKeys.slice();
+    const desktopIconPerColumn = normalizeDesktopIconPerColumn(
+      desktopIconPerColumnEl?.value
+    );
     const launchpadIconRedrawSelectedMap = buildLaunchpadRedrawMapFromSelection(
       launchpadIconRedrawSelected
     );
     try {
       await chrome.tabs.sendMessage(tab.id, {
         type: "FNOS_APPLY",
+        basePresetEnabled,
         titlebarStyle,
         launchpadStyle,
+        desktopIconLayoutEnabled,
+        desktopIconLayoutMode,
         launchpadIconScaleEnabled,
         launchpadIconScaleSelectedKeys: launchpadIconScaleSelected,
         launchpadIconMaskOnlyKeys: launchpadIconMaskOnlySelected,
         launchpadIconRedrawKeys: launchpadIconRedrawSelected,
         launchpadIconRedrawMap: launchpadIconRedrawSelectedMap,
+        desktopIconPerColumn,
         brandColor,
         fontSettings: getFontPayload(),
         customCodeSettings: getCustomCodePayload(),
@@ -1496,6 +1571,51 @@
     setBrandColorUI(clamped);
     if (persist) {
       await saveBrandColor(clamped);
+    }
+    await applyToCurrentTabIfNeeded();
+  }
+
+  async function applyBasePresetEnabled(next, persist) {
+    const enabled = Boolean(next);
+    if (basePresetEnabledEl) {
+      basePresetEnabledEl.checked = enabled;
+    }
+    updateBasePresetSettingsVisibility();
+    if (persist) {
+      await safeSyncSet({ basePresetEnabled: enabled });
+    }
+    await applyToCurrentTabIfNeeded();
+  }
+
+  async function applyDesktopIconLayoutMode(next, persist) {
+    const mode = normalizeDesktopIconLayoutMode(next);
+    if (desktopIconLayoutModeEl) {
+      desktopIconLayoutModeEl.value = mode;
+    }
+    updateDesktopIconPerColumnControlState();
+    if (persist) {
+      await safeSyncSet({ desktopIconLayoutMode: mode });
+    }
+    await applyToCurrentTabIfNeeded();
+  }
+
+  async function applyDesktopIconLayoutEnabled(next, persist) {
+    const enabled = Boolean(next);
+    if (desktopIconLayoutEnabledEl) {
+      desktopIconLayoutEnabledEl.checked = enabled;
+    }
+    updateDesktopIconPerColumnControlState();
+    if (persist) {
+      await safeSyncSet({ desktopIconLayoutEnabled: enabled });
+    }
+    await applyToCurrentTabIfNeeded();
+  }
+
+  async function applyDesktopIconPerColumn(next, persist) {
+    const normalized = normalizeDesktopIconPerColumn(next);
+    setDesktopIconPerColumnUI(normalized);
+    if (persist) {
+      await safeSyncSet({ desktopIconPerColumn: normalized });
     }
     await applyToCurrentTabIfNeeded();
   }
@@ -1534,11 +1654,15 @@
     originEl.textContent = "当前页不是 http/https 页面";
     siteToggleEl.disabled = true;
     autoSuspectedFnOSEl.disabled = true;
+    if (basePresetEnabledEl) basePresetEnabledEl.disabled = true;
     styleWindowsEl.disabled = true;
     styleMacEl.disabled = true;
     styleClassicLaunchpadEl.disabled = true;
     styleSpotlightLaunchpadEl.disabled = true;
     if (launchpadIconScaleEnabledEl) launchpadIconScaleEnabledEl.disabled = true;
+    if (desktopIconLayoutEnabledEl) desktopIconLayoutEnabledEl.disabled = true;
+    if (desktopIconLayoutModeEl) desktopIconLayoutModeEl.disabled = true;
+    if (desktopIconPerColumnEl) desktopIconPerColumnEl.disabled = true;
 
     if (fontOverrideEnabledEl) fontOverrideEnabledEl.disabled = true;
     if (fontFamilyEl) fontFamilyEl.disabled = true;
@@ -1554,8 +1678,10 @@
 
     setFnUICheckedStatus(false);
     updatePlatformOptionsVisibility();
+    updateBasePresetSettingsVisibility();
     updateFontSettingsVisibility();
     updateCustomCodeSettingsVisibility();
+    updateDesktopIconPerColumnControlState();
     setLaunchpadAppList([], "应用列表：当前页不是 http/https 页面");
     return;
   }
@@ -1577,13 +1703,18 @@
   const state = await chrome.storage.sync.get({
     enabledOrigins: [],
     autoEnableSuspectedFnOS: true,
+    basePresetEnabled: true,
     titlebarStyle: "windows",
     launchpadStyle: "classic",
+    desktopIconLayoutEnabled: true,
+    desktopIconLayoutMode: DESKTOP_ICON_LAYOUT_MODE_DEFAULT,
+    desktopIconPerColumnEnabled: null,
     launchpadIconScaleEnabled: false,
     launchpadIconScaleSelectedKeys: [],
     launchpadIconMaskOnlyKeys: [],
     launchpadIconRedrawKeys: [],
     launchpadIconRedrawMap: {},
+    desktopIconPerColumn: DESKTOP_ICON_PER_COLUMN_DEFAULT,
     brandColor: DEFAULT_BRAND_COLOR,
     fontOverrideEnabled: DEFAULT_FONT_SETTINGS.enabled,
     fontFamily: DEFAULT_FONT_SETTINGS.family,
@@ -1646,6 +1777,9 @@
 
   siteToggleEl.checked = enabledOrigins.includes(origin);
   autoSuspectedFnOSEl.checked = Boolean(state.autoEnableSuspectedFnOS);
+  if (basePresetEnabledEl) {
+    basePresetEnabledEl.checked = Boolean(state.basePresetEnabled);
+  }
 
   const titlebarStyle = state.titlebarStyle === "mac" ? "mac" : "windows";
   styleWindowsEl.checked = titlebarStyle === "windows";
@@ -1656,6 +1790,33 @@
   styleSpotlightLaunchpadEl.checked = launchpadStyle === "spotlight";
   if (launchpadIconScaleEnabledEl) {
     launchpadIconScaleEnabledEl.checked = Boolean(state.launchpadIconScaleEnabled);
+  }
+  const desktopIconLayoutEnabled =
+    typeof state.desktopIconLayoutEnabled === "boolean"
+      ? state.desktopIconLayoutEnabled
+      : true;
+  if (desktopIconLayoutEnabledEl) {
+    desktopIconLayoutEnabledEl.checked = desktopIconLayoutEnabled;
+  }
+  if (state.desktopIconLayoutEnabled !== desktopIconLayoutEnabled) {
+    await safeSyncSet({ desktopIconLayoutEnabled });
+  }
+  const desktopIconLayoutMode = normalizeDesktopIconLayoutMode(
+    state.desktopIconLayoutMode,
+    state.desktopIconPerColumnEnabled
+  );
+  if (desktopIconLayoutModeEl) {
+    desktopIconLayoutModeEl.value = desktopIconLayoutMode;
+  }
+  if (state.desktopIconLayoutMode !== desktopIconLayoutMode) {
+    await safeSyncSet({ desktopIconLayoutMode });
+  }
+  const desktopIconPerColumn = normalizeDesktopIconPerColumn(
+    state.desktopIconPerColumn
+  );
+  setDesktopIconPerColumnUI(desktopIconPerColumn);
+  if (state.desktopIconPerColumn !== desktopIconPerColumn) {
+    await safeSyncSet({ desktopIconPerColumn });
   }
   launchpadIconScaleSelectedKeys = normalizeLaunchpadKeyList(
     state.launchpadIconScaleSelectedKeys
@@ -1684,6 +1845,8 @@
   setCustomCodeSettingsUI(customCodeSettings);
 
   updatePlatformOptionsVisibility();
+  updateBasePresetSettingsVisibility();
+  updateDesktopIconPerColumnControlState();
 
   siteToggleEl.addEventListener("change", async () => {
     const enabled = siteToggleEl.checked;
@@ -1706,6 +1869,12 @@
     updatePlatformOptionsVisibility();
     await applyToCurrentTabIfNeeded();
   });
+
+  if (basePresetEnabledEl) {
+    basePresetEnabledEl.addEventListener("change", async () => {
+      await applyBasePresetEnabled(basePresetEnabledEl.checked, true);
+    });
+  }
 
   for (const radio of [styleWindowsEl, styleMacEl]) {
     radio.addEventListener("change", async () => {
@@ -1731,6 +1900,31 @@
       });
       await applyToCurrentTabIfNeeded();
       await refreshLaunchpadAppList();
+    });
+  }
+
+  if (desktopIconLayoutEnabledEl) {
+    desktopIconLayoutEnabledEl.addEventListener("change", async () => {
+      await applyDesktopIconLayoutEnabled(desktopIconLayoutEnabledEl.checked, true);
+    });
+  }
+
+  if (desktopIconPerColumnEl) {
+    const handleDesktopIconPerColumnCommit = async () => {
+      await applyDesktopIconPerColumn(desktopIconPerColumnEl.value, true);
+    };
+    desktopIconPerColumnEl.addEventListener("change", handleDesktopIconPerColumnCommit);
+    desktopIconPerColumnEl.addEventListener("blur", handleDesktopIconPerColumnCommit);
+    desktopIconPerColumnEl.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      await handleDesktopIconPerColumnCommit();
+    });
+  }
+
+  if (desktopIconLayoutModeEl) {
+    desktopIconLayoutModeEl.addEventListener("change", async () => {
+      await applyDesktopIconLayoutMode(desktopIconLayoutModeEl.value, true);
     });
   }
 

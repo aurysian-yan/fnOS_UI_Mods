@@ -10,6 +10,8 @@
   const FONT_STYLE_ID = 'fnos-ui-mods-font-style';
   const CUSTOM_CSS_STYLE_ID = 'fnos-ui-mods-custom-css-style';
   const CUSTOM_JS_SCRIPT_ID = 'fnos-ui-mods-custom-js-script';
+  const DESKTOP_ICON_LAYOUT_STYLE_ID = 'fnos-ui-mods-desktop-icon-layout-style';
+  const DESKTOP_ICON_MOD_STYLE_ID = 'fnos-ui-mods-desktop-icon-mod-style';
   const LAUNCHPAD_ICON_SCALE_STYLE_ID = 'fnos-ui-mods-launchpad-icon-scale-style';
   const LAUNCHPAD_ICON_ORIGINAL_SRC_ATTR = 'data-fnos-original-src';
   const LAUNCHPAD_ICON_ORIGINAL_DATA_SRC_ATTR = 'data-fnos-original-data-src';
@@ -17,6 +19,10 @@
   const THEME_DEFAULT_BRAND = '#0066ff';
   const BRAND_LIGHTNESS_MIN = 0.3;
   const BRAND_LIGHTNESS_MAX = 0.7;
+  const DESKTOP_ICON_LAYOUT_MODE_DEFAULT = 'adaptive';
+  const DESKTOP_ICON_PER_COLUMN_DEFAULT = 8;
+  const DESKTOP_ICON_PER_COLUMN_MIN = 4;
+  const DESKTOP_ICON_PER_COLUMN_MAX = 16;
 
   const FONT_LOCAL_DATA_KEY = 'customFontDataUrl';
   const FONT_LOCAL_NAME_KEY = 'customFontFileName';
@@ -70,8 +76,18 @@
     '/static/app/icons/',
     '/app-center-static/serviceicon/'
   ];
+  const DESKTOP_ICON_GRID_SELECTOR =
+    '.box-border.flex.size-full.flex-col.flex-wrap.place-content-start.items-start.py-base-loose:has(.flex.h-\\[124px\\].w-\\[130px\\].cursor-pointer.flex-col.items-center.justify-center.gap-4)';
+  const DESKTOP_ICON_CARD_SELECTOR =
+    '.flex.h-\\[124px\\].w-\\[130px\\].cursor-pointer.flex-col.items-center.justify-center.gap-4';
 
   let currentBrandColor = THEME_DEFAULT_BRAND;
+  let currentBasePresetEnabled = true;
+  let currentTitlebarStyle = 'windows';
+  let currentLaunchpadStyle = 'classic';
+  let currentDesktopIconLayoutEnabled = true;
+  let currentDesktopIconLayoutMode = DESKTOP_ICON_LAYOUT_MODE_DEFAULT;
+  let currentDesktopIconPerColumn = DESKTOP_ICON_PER_COLUMN_DEFAULT;
   let currentFontSettings = { ...FONT_DEFAULT_SETTINGS };
   let currentCustomCodeSettings = { ...CUSTOM_CODE_DEFAULT_SETTINGS };
   let currentLaunchpadIconScaleEnabled = false;
@@ -87,6 +103,7 @@
   let launchpadIconRefreshRafId = 0;
   let lastAppliedCustomJs = '';
   let isInjectionActive = false;
+  let extensionContextInvalidated = false;
 
   const TITLEBAR_STYLES = {
     windows: 'windows_titlebar_mod.css',
@@ -97,6 +114,37 @@
     classic: 'classic_launchpad_mod.css',
     spotlight: 'spotlight_launchpad_mod.css'
   };
+
+  function normalizeTitlebarStyle(style) {
+    return style === 'mac' ? 'mac' : 'windows';
+  }
+
+  function normalizeLaunchpadStyle(style) {
+    return style === 'spotlight' ? 'spotlight' : 'classic';
+  }
+
+  function isContextInvalidatedError(error) {
+    const message = error?.message;
+    return typeof message === 'string' && message.includes('Extension context invalidated');
+  }
+
+  function markContextInvalidated(error) {
+    if (!isContextInvalidatedError(error)) return;
+    extensionContextInvalidated = true;
+    stopLaunchpadIconObserver();
+  }
+
+  function safeRuntimeGetURL(path) {
+    if (extensionContextInvalidated) return '';
+    if (typeof path !== 'string' || !path) return '';
+    try {
+      if (!chrome?.runtime?.id) return '';
+      return chrome.runtime.getURL(path);
+    } catch (error) {
+      markContextInvalidated(error);
+      return '';
+    }
+  }
 
   function ensureLaunchpadIconScaleStyle() {
     let style = document.getElementById(LAUNCHPAD_ICON_SCALE_STYLE_ID);
@@ -350,7 +398,11 @@
       );
     }
 
-    const redrawUrl = chrome.runtime.getURL(redrawPath);
+    const redrawUrl = safeRuntimeGetURL(redrawPath);
+    if (!redrawUrl) {
+      restoreLaunchpadRedrawIconFromImage(imageEl);
+      return;
+    }
     if (imageEl.getAttribute('src') !== redrawUrl) {
       imageEl.setAttribute('src', redrawUrl);
     }
@@ -793,6 +845,16 @@
     return style;
   }
 
+  function getDesktopIconLayoutStyleElement() {
+    let style = document.getElementById(DESKTOP_ICON_LAYOUT_STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = DESKTOP_ICON_LAYOUT_STYLE_ID;
+      (document.head || document.documentElement).appendChild(style);
+    }
+    return style;
+  }
+
   function buildThemeCss(palette) {
     const selectors = [
       ':root',
@@ -817,6 +879,13 @@
     }
   }
 
+  function clearBrandPaletteInline(target) {
+    if (!target?.style) return;
+    for (let i = 0; i < 10; i += 1) {
+      target.style.removeProperty(`--semi-brand-${i}`);
+    }
+  }
+
   function applyBrandPalette(brandColor) {
     const root = document.documentElement;
     if (!root) return;
@@ -833,12 +902,66 @@
   function updateBrandColor(nextColor) {
     const normalized = normalizeHex(nextColor) || THEME_DEFAULT_BRAND;
     currentBrandColor = clampBrandLightness(normalized);
+    if (!currentBasePresetEnabled) return;
     applyBrandPalette(currentBrandColor);
   }
 
   function normalizeText(value, maxLength = 300) {
     if (typeof value !== 'string') return '';
     return value.trim().slice(0, maxLength);
+  }
+
+  function normalizeDesktopIconPerColumn(value) {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsed)) return DESKTOP_ICON_PER_COLUMN_DEFAULT;
+    return Math.max(
+      DESKTOP_ICON_PER_COLUMN_MIN,
+      Math.min(DESKTOP_ICON_PER_COLUMN_MAX, parsed)
+    );
+  }
+
+  function normalizeDesktopIconLayoutMode(value, legacyEnabled) {
+    const normalized =
+      typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (normalized === 'adaptive' || normalized === 'fixed') {
+      return normalized;
+    }
+    if (typeof legacyEnabled === 'boolean') {
+      return legacyEnabled ? 'fixed' : 'adaptive';
+    }
+    return DESKTOP_ICON_LAYOUT_MODE_DEFAULT;
+  }
+
+  function normalizeDesktopIconLayoutEnabled(value) {
+    return typeof value === 'boolean' ? value : true;
+  }
+
+  function updateDesktopIconLayout(
+    nextValue,
+    nextMode = DESKTOP_ICON_LAYOUT_MODE_DEFAULT,
+    nextEnabled = true
+  ) {
+    currentDesktopIconLayoutEnabled = normalizeDesktopIconLayoutEnabled(nextEnabled);
+    currentDesktopIconPerColumn = normalizeDesktopIconPerColumn(nextValue);
+    currentDesktopIconLayoutMode = normalizeDesktopIconLayoutMode(nextMode);
+    syncDesktopIconLayoutCss();
+    if (!currentDesktopIconLayoutEnabled) {
+      removeElementById(DESKTOP_ICON_LAYOUT_STYLE_ID);
+      return;
+    }
+    const style = getDesktopIconLayoutStyleElement();
+    const rowsTemplate =
+      currentDesktopIconLayoutMode === 'fixed'
+        ? `repeat(${currentDesktopIconPerColumn}, minmax(0, 1fr))`
+        : 'repeat(var(--fn-desktop-icons-adaptive-target), minmax(0, 1fr))';
+    style.textContent = [
+      ':root {',
+      `  --fn-desktop-icons-per-column: ${currentDesktopIconPerColumn} !important;`,
+      '}',
+      `${DESKTOP_ICON_GRID_SELECTOR} {`,
+      `  grid-template-rows: ${rowsTemplate} !important;`,
+      '}'
+    ].join('\n');
   }
 
   function normalizeFontWeight(value) {
@@ -988,6 +1111,14 @@
     }
   }
 
+  function syncDesktopIconLayoutCss() {
+    if (currentDesktopIconLayoutEnabled) {
+      injectStyle(DESKTOP_ICON_MOD_STYLE_ID, 'desktop_icon_mod.css');
+      return;
+    }
+    removeElementById(DESKTOP_ICON_MOD_STYLE_ID);
+  }
+
   function injectCustomJs(code) {
     const script = document.createElement('script');
     script.id = CUSTOM_JS_SCRIPT_ID;
@@ -1086,33 +1217,56 @@
       (document.head || document.documentElement).appendChild(link);
     }
 
-    const nextHref = chrome.runtime.getURL(href);
+    const nextHref = safeRuntimeGetURL(href);
+    if (!nextHref) return;
     if (link.href !== nextHref) {
       link.href = nextHref;
     }
   }
 
-  function injectStyles(titlebarStyle, launchpadStyle) {
-    const normalizedStyle = titlebarStyle === 'mac' ? 'mac' : 'windows';
-    const normalizedLaunchpadStyle =
-      launchpadStyle === 'spotlight' ? 'spotlight' : 'classic';
+  function injectStyles(titlebarStyle, launchpadStyle, basePresetEnabled = true) {
+    const normalizedStyle = normalizeTitlebarStyle(titlebarStyle);
+    const normalizedLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
     injectStyle(BASIC_STYLE_ID, 'basic_mod.css');
-    injectStyle(TITLEBAR_STYLE_ID, TITLEBAR_STYLES[normalizedStyle]);
-    injectStyle(LAUNCHPAD_STYLE_ID, LAUNCHPAD_STYLES[normalizedLaunchpadStyle]);
+    syncDesktopIconLayoutCss();
+    if (basePresetEnabled) {
+      injectStyle(TITLEBAR_STYLE_ID, TITLEBAR_STYLES[normalizedStyle]);
+      injectStyle(LAUNCHPAD_STYLE_ID, LAUNCHPAD_STYLES[normalizedLaunchpadStyle]);
+      return;
+    }
+    removeElementById(TITLEBAR_STYLE_ID);
+    removeElementById(LAUNCHPAD_STYLE_ID);
+  }
+
+  function setBasePresetEnabled(nextEnabled) {
+    currentBasePresetEnabled = Boolean(nextEnabled);
+    injectStyles(
+      currentTitlebarStyle,
+      currentLaunchpadStyle,
+      currentBasePresetEnabled
+    );
+    if (currentBasePresetEnabled) return;
+    removeElementById(THEME_STYLE_ID);
+    clearBrandPaletteInline(document.documentElement);
+    clearBrandPaletteInline(document.body);
+    clearBrandPaletteInline(document.getElementById('root'));
   }
 
   function injectScript() {
     if (document.getElementById(SCRIPT_ID)) return;
 
+    const scriptUrl = safeRuntimeGetURL('mod.js');
+    if (!scriptUrl) return;
     const script = document.createElement('script');
     script.id = SCRIPT_ID;
-    script.src = chrome.runtime.getURL('mod.js');
+    script.src = scriptUrl;
     script.type = 'text/javascript';
     (document.head || document.documentElement).appendChild(script);
   }
 
   function notifyInjectionTriggered(triggerReason = 'unknown') {
     try {
+      if (extensionContextInvalidated) return;
       chrome.runtime.sendMessage({
         type: 'FNOS_INJECTION_TRIGGERED',
         triggerReason,
@@ -1120,14 +1274,19 @@
         href: location.href,
         timestamp: Date.now()
       });
-    } catch (_error) {
+    } catch (error) {
+      markContextInvalidated(error);
       // ignore background message failures
     }
   }
 
   function startInject(
+    basePresetEnabled,
     titlebarStyle,
     launchpadStyle,
+    desktopIconLayoutEnabled,
+    desktopIconLayoutMode,
+    desktopIconPerColumn,
     brandColor,
     fontSettings,
     customCodeSettings,
@@ -1139,7 +1298,14 @@
     triggerReason = 'unknown'
   ) {
     isInjectionActive = true;
-    injectStyles(titlebarStyle, launchpadStyle);
+    currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
+    currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
+    setBasePresetEnabled(basePresetEnabled);
+    updateDesktopIconLayout(
+      desktopIconPerColumn,
+      desktopIconLayoutMode,
+      desktopIconLayoutEnabled
+    );
     updateBrandColor(brandColor);
     updateFontSettings(fontSettings || currentFontSettings);
     updateCustomCodeSettings(customCodeSettings || currentCustomCodeSettings);
@@ -1225,8 +1391,17 @@
         }
 
         startInject(
-          message.titlebarStyle,
-          message.launchpadStyle,
+          message.basePresetEnabled ?? currentBasePresetEnabled,
+          message.titlebarStyle ?? currentTitlebarStyle,
+          message.launchpadStyle ?? currentLaunchpadStyle,
+          normalizeDesktopIconLayoutEnabled(
+            message.desktopIconLayoutEnabled ?? currentDesktopIconLayoutEnabled
+          ),
+          normalizeDesktopIconLayoutMode(
+            message.desktopIconLayoutMode,
+            message.desktopIconPerColumnEnabled
+          ),
+          message.desktopIconPerColumn ?? currentDesktopIconPerColumn,
           message.brandColor ?? currentBrandColor,
           message.fontSettings ?? currentFontSettings,
           message.customCodeSettings ?? currentCustomCodeSettings,
@@ -1285,13 +1460,18 @@
     {
       enabledOrigins: [],
       autoEnableSuspectedFnOS: true,
+      basePresetEnabled: true,
       titlebarStyle: 'windows',
       launchpadStyle: 'classic',
+      desktopIconLayoutEnabled: true,
+      desktopIconLayoutMode: DESKTOP_ICON_LAYOUT_MODE_DEFAULT,
+      desktopIconPerColumnEnabled: null,
       launchpadIconScaleEnabled: false,
       launchpadIconScaleSelectedKeys: [],
       launchpadIconMaskOnlyKeys: [],
       launchpadIconRedrawKeys: [],
       launchpadIconRedrawMap: {},
+      desktopIconPerColumn: DESKTOP_ICON_PER_COLUMN_DEFAULT,
       brandColor: THEME_DEFAULT_BRAND,
       fontOverrideEnabled: FONT_DEFAULT_SETTINGS.enabled,
       fontFamily: FONT_DEFAULT_SETTINGS.family,
@@ -1304,8 +1484,13 @@
     async ({
       enabledOrigins,
       autoEnableSuspectedFnOS,
+      basePresetEnabled,
       titlebarStyle,
       launchpadStyle,
+      desktopIconLayoutEnabled,
+      desktopIconLayoutMode,
+      desktopIconPerColumnEnabled,
+      desktopIconPerColumn,
       launchpadIconScaleEnabled,
       launchpadIconScaleSelectedKeys,
       launchpadIconMaskOnlyKeys,
@@ -1341,9 +1526,20 @@
       });
 
       if (isWhitelisted || autoEnabled) {
+        const normalizedDesktopIconLayoutEnabled = normalizeDesktopIconLayoutEnabled(
+          desktopIconLayoutEnabled
+        );
+        const normalizedDesktopIconLayoutMode = normalizeDesktopIconLayoutMode(
+          desktopIconLayoutMode,
+          desktopIconPerColumnEnabled
+        );
         startInject(
+          basePresetEnabled,
           titlebarStyle,
           launchpadStyle,
+          normalizedDesktopIconLayoutEnabled,
+          normalizedDesktopIconLayoutMode,
+          desktopIconPerColumn,
           brandColor,
           syncedFontSettings,
           syncedCustomCodeSettings,
@@ -1355,6 +1551,19 @@
           isWhitelisted ? 'auto_whitelist' : 'auto_suspected'
         );
       } else {
+        currentBasePresetEnabled = Boolean(basePresetEnabled);
+        currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
+        currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
+        currentDesktopIconLayoutEnabled = normalizeDesktopIconLayoutEnabled(
+          desktopIconLayoutEnabled
+        );
+        currentDesktopIconLayoutMode = normalizeDesktopIconLayoutMode(
+          desktopIconLayoutMode,
+          desktopIconPerColumnEnabled
+        );
+        currentDesktopIconPerColumn = normalizeDesktopIconPerColumn(
+          desktopIconPerColumn
+        );
         currentFontSettings = syncedFontSettings;
         currentCustomCodeSettings = syncedCustomCodeSettings;
         currentLaunchpadIconScaleEnabled = Boolean(launchpadIconScaleEnabled);
@@ -1381,12 +1590,102 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync') {
+      if (changes.basePresetEnabled) {
+        const nextBasePresetEnabled = Boolean(changes.basePresetEnabled.newValue);
+        if (!isInjectionActive) {
+          currentBasePresetEnabled = nextBasePresetEnabled;
+        } else {
+          setBasePresetEnabled(nextBasePresetEnabled);
+          if (nextBasePresetEnabled) {
+            updateBrandColor(currentBrandColor);
+          }
+        }
+      }
+
+      if (changes.titlebarStyle || changes.launchpadStyle) {
+        currentTitlebarStyle = changes.titlebarStyle
+          ? normalizeTitlebarStyle(changes.titlebarStyle.newValue)
+          : currentTitlebarStyle;
+        currentLaunchpadStyle = changes.launchpadStyle
+          ? normalizeLaunchpadStyle(changes.launchpadStyle.newValue)
+          : currentLaunchpadStyle;
+        if (isInjectionActive) {
+          injectStyles(
+            currentTitlebarStyle,
+            currentLaunchpadStyle,
+            currentBasePresetEnabled
+          );
+        }
+      }
+
+      if (changes.desktopIconLayoutMode) {
+        const nextDesktopIconLayoutMode = normalizeDesktopIconLayoutMode(
+          changes.desktopIconLayoutMode.newValue
+        );
+        if (!isInjectionActive) {
+          currentDesktopIconLayoutMode = nextDesktopIconLayoutMode;
+        } else {
+          updateDesktopIconLayout(
+            currentDesktopIconPerColumn,
+            nextDesktopIconLayoutMode,
+            currentDesktopIconLayoutEnabled
+          );
+        }
+      }
+      if (changes.desktopIconLayoutEnabled) {
+        const nextDesktopIconLayoutEnabled = normalizeDesktopIconLayoutEnabled(
+          changes.desktopIconLayoutEnabled.newValue
+        );
+        if (!isInjectionActive) {
+          currentDesktopIconLayoutEnabled = nextDesktopIconLayoutEnabled;
+        } else {
+          updateDesktopIconLayout(
+            currentDesktopIconPerColumn,
+            currentDesktopIconLayoutMode,
+            nextDesktopIconLayoutEnabled
+          );
+        }
+      }
+      if (
+        changes.desktopIconPerColumnEnabled &&
+        !changes.desktopIconLayoutMode
+      ) {
+        const nextDesktopIconLayoutMode = normalizeDesktopIconLayoutMode(
+          undefined,
+          changes.desktopIconPerColumnEnabled.newValue
+        );
+        if (!isInjectionActive) {
+          currentDesktopIconLayoutMode = nextDesktopIconLayoutMode;
+        } else {
+          updateDesktopIconLayout(
+            currentDesktopIconPerColumn,
+            nextDesktopIconLayoutMode,
+            currentDesktopIconLayoutEnabled
+          );
+        }
+      }
+
       if (changes.brandColor) {
         if (!isInjectionActive) {
           const normalized = normalizeHex(changes.brandColor.newValue) || THEME_DEFAULT_BRAND;
           currentBrandColor = clampBrandLightness(normalized);
         } else {
           updateBrandColor(changes.brandColor.newValue);
+        }
+      }
+
+      if (changes.desktopIconPerColumn) {
+        const nextDesktopIconPerColumn = normalizeDesktopIconPerColumn(
+          changes.desktopIconPerColumn.newValue
+        );
+        if (!isInjectionActive) {
+          currentDesktopIconPerColumn = nextDesktopIconPerColumn;
+        } else {
+          updateDesktopIconLayout(
+            nextDesktopIconPerColumn,
+            currentDesktopIconLayoutMode,
+            currentDesktopIconLayoutEnabled
+          );
         }
       }
 

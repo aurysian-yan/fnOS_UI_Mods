@@ -1,0 +1,188 @@
+/* ========= 桌面图标 ========= */
+
+:root {
+    --fn-desktop-icons-per-column: 8;
+    /* 自适应阶梯（按可视高度）:
+       <=349 => 3, <=449 => 4, <=549 => 5
+       <=649 => 6, <=749 => 6, <=849 => 7
+       <=949 => 8, <=1049 => 9, 后续每 +100 高度 +1 */
+    --fn-desktop-icons-adaptive-target: 8;
+    --fn-desktop-icon-width: 130px;
+    --fn-desktop-icon-height-min: 90px;
+    --fn-desktop-icon-height-max: 170px;
+    --fn-desktop-icon-gap-x: 0px;
+    --fn-desktop-icon-gap-y: 0px;
+    --fn-desktop-icon-hover-lift: -6px;
+}
+
+@media (max-height: 849px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 7;
+    }
+}
+
+@media (max-height: 749px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 6;
+    }
+}
+
+@media (max-height: 649px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 6;
+    }
+}
+
+@media (max-height: 549px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 5;
+    }
+}
+
+@media (max-height: 449px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 4;
+    }
+}
+
+@media (max-height: 349px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 3;
+    }
+}
+
+@media (min-height: 1000px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 9;
+    }
+}
+
+@media (min-height: 1050px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 10;
+    }
+}
+
+@media (min-height: 1150px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 11;
+    }
+}
+
+@media (min-height: 1250px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 12;
+    }
+}
+
+@media (min-height: 1350px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 13;
+    }
+}
+
+@media (min-height: 1450px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 14;
+    }
+}
+
+@media (min-height: 1550px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 15;
+    }
+}
+
+@media (min-height: 1650px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 16;
+    }
+}
+
+@media (min-height: 1750px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 17;
+    }
+}
+
+@media (min-height: 1850px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 18;
+    }
+}
+
+@media (min-height: 1950px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 19;
+    }
+}
+
+@media (min-height: 2050px) {
+    :root {
+        --fn-desktop-icons-adaptive-target: 20;
+    }
+}
+
+.box-border.flex.size-full.flex-col.flex-wrap.place-content-start.items-start.py-base-loose:has(.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4) {
+    display: grid !important;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(var(--fn-desktop-icons-adaptive-target, var(--fn-desktop-icons-per-column, 8)), minmax(0, 1fr));
+    grid-auto-columns: var(--fn-desktop-icon-width);
+    column-gap: var(--fn-desktop-icon-gap-x);
+    row-gap: var(--fn-desktop-icon-gap-y);
+    justify-content: start;
+    align-content: stretch;
+    justify-items: start;
+}
+
+.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 {
+    width: var(--fn-desktop-icon-width) !important;
+    height: 100% !important;
+    min-height: 0;
+    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
+}
+
+.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .box-border.size-\[80px\].p-\[15\%\].\!h-\[50px\].\!w-\[50px\].\!p-0 {
+    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
+    filter: drop-shadow(0 2px 15.1px 0 rgba(0, 0, 0, 0.40)) !important;
+}
+
+.py-base-loose .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .semi-badge {
+    vertical-align: top;
+}
+
+.py-base-loose .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .semi-badge>.box-border.size-\[80px\].p-\[15\%\].\!h-\[50px\].\!w-\[50px\].\!p-0 {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px;
+    min-height: 80px;
+}
+
+.py-base-loose .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .semi-badge .semi-badge-content-wrapper>.box-border.size-\[80px\].p-\[15\%\].\!h-\[50px\].\!w-\[50px\].\!p-0 {
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px;
+    min-height: 80px;
+}
+
+.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4:hover {
+    transform: translateY(var(--fn-desktop-icon-hover-lift));
+    gap: .9rem;
+
+    >div:first-of-type {
+        transform: rotate(6deg);
+    }
+}
+
+.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4 .line-clamp-1.max-w-\[112px\].shrink-0.whitespace-normal.text-center.align-top.text-\[14px\].font-bold.leading-\[16px\].text-white {
+    text-shadow: rgba(0, 0, 0, 0.4) 0px 0px 10px, rgba(0, 0, 0, 0.75) 0px 0px 20px;
+    overflow: visible;
+}
+
+.py-base-loose .flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4>div {
+    filter: drop-shadow(2px 4px 6px rgba(0, 0, 0, 0.4));
+}
+
+span.semi-badge:has(.flex.h-\[124px\].w-\[130px\].cursor-pointer.flex-col.items-center.justify-center.gap-4) {
+    height: 100%;
+}

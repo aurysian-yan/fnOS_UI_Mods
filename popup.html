@@ -631,7 +631,8 @@
 
     .font-settings,
     .color-settings,
-    .custom-code-settings {
+    .custom-code-settings,
+    .desktop-icon-settings {
       width: 100%;
       margin-top: 8px;
       border: 1px solid var(--card-border);
@@ -846,6 +847,7 @@
       .font-settings,
       .color-settings,
       .custom-code-settings,
+      .desktop-icon-settings,
       .launchpad-extra-settings,
       .update-panel {
         border-radius: 16px;
@@ -987,6 +989,19 @@
     </div>
 
     <div class="color-settings">
+      <div class="row">
+        <div class="label">
+          基础美化预设
+          <div class="sub">关闭后不应用主题色、标题栏样式、启动台样式</div>
+        </div>
+        <label class="switch">
+          <input id="basePresetEnabled" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="colorSettings" class="color-settings">
       <div class="row theme-row" style="margin: 2px -4px; width: calc(100% + 4px);">
         <div class="label">
           <span style="display: flex; gap: 2px; align-items: center;">
@@ -1043,6 +1058,31 @@
           <div class="platform-desc">聚焦搜索与面板视觉风格</div>
         </div>
       </label>
+    </div>
+
+    <div class="desktop-icon-settings">
+      <div class="row">
+        <div class="label" style="margin: 4px;">
+          桌面图标优化
+          <div class="sub">优化桌面图标布局，美化悬停状态反馈</div>
+        </div>
+        <label class="switch">
+          <input id="desktopIconLayoutEnabled" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="field">
+        <p class="field-label" style="margin: 4px;">桌面图标布局</p>
+        <select id="desktopIconLayoutMode" class="field-input">
+          <option value="adaptive">自适应</option>
+          <option value="fixed">固定网格</option>
+        </select>
+      </div>
+      <p class="field-help">自适应：每列图标数量随窗口高度变化；固定网格：手动指定每列数量</p>
+      <div class="field">
+        <p class="field-label" style="margin: 4px;">固定网格每列数量</p>
+        <input id="desktopIconPerColumn" class="field-input" type="number" min="4" max="16" step="1" placeholder="8" />
+      </div>
     </div>
 
     <div class="launchpad-extra-settings">
