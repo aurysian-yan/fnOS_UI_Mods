@@ -4,10 +4,12 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const readline = require('node:readline/promises');
+const { spawn } = require('node:child_process');
 const { stdin, stdout } = require('node:process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT_DIR, 'ssh');
+const FPK_APP_DIR = path.join(ROOT_DIR, 'fpk', 'FnOS_UI_Mods');
 const DEFAULT_BRAND = '#0066ff';
 
 const FILES = {
@@ -24,6 +26,38 @@ const LEGACY_BUILD_FILES = [
   'mod.mac.css',
   'mod.basic.css'
 ];
+
+const FPK_SYNC_FILE_MAPPINGS = [
+  ['basic_mod.css', 'fpk/FnOS_UI_Mods/app/www/assets/templates/basic_mod.css'],
+  ['mac_titlebar_mod.css', 'fpk/FnOS_UI_Mods/app/www/assets/templates/mac_titlebar_mod.css'],
+  ['windows_titlebar_mod.css', 'fpk/FnOS_UI_Mods/app/www/assets/templates/windows_titlebar_mod.css'],
+  ['mod.js', 'fpk/FnOS_UI_Mods/app/www/assets/templates/mod.js'],
+  [
+    'spotlight_launchpad_mod.css',
+    'fpk/FnOS_UI_Mods/app/www/assets/templates/spotlight_launchpad_mod.css'
+  ],
+  ['classic_launchpad_mod.css', 'fpk/FnOS_UI_Mods/app/www/assets/templates/classic_launchpad_mod.css'],
+  ['fonts/SarasaMonoSC-SemiBold.ttf', 'fpk/FnOS_UI_Mods/app/www/fonts/SarasaMonoSC-SemiBold.ttf'],
+  ['fonts/SarasaUiSC-SemiBold.ttf', 'fpk/FnOS_UI_Mods/app/www/fonts/SarasaUiSC-SemiBold.ttf']
+];
+
+const FPK_SYNC_DIR_MAPPINGS = [['prefect_icon', 'fpk/FnOS_UI_Mods/app/www/prefect_icon']];
+
+const FNPACK_BINARIES = {
+  win32: {
+    x64: 'fnpack-1.2.1-windows-amd64.exe'
+  },
+  linux: {
+    x64: 'fnpack-1.2.1-linux-amd64',
+    arm64: 'fnpack-1.2.1-linux-arm64'
+  },
+  darwin: {
+    x64: 'fnpack-1.2.1-darwin-amd64',
+    arm64: 'fnpack-1.2.1-darwin-arm64'
+  }
+};
+
+const FNPACK_DIR_CANDIDATES = [path.join(ROOT_DIR, 'scripts', 'fnpack'), path.join(ROOT_DIR, 'script', 'fnpack')];
 
 const ICONS = {
   step: '↪',
@@ -77,6 +111,20 @@ function createI18n(lang) {
       `构建完成（标题栏=${titlebar}，启动台=${launchpad}，主题色=${brandLabel}）`,
     themeSkipped: '未替换（保持默认）',
     removedLegacy: (filePath) => `已清理遗留文件 ${filePath}`,
+    syncStart: '开始同步根目录资源到 fpk 模板目录',
+    syncUpdated: (src, dst) => `已同步 ${src} -> ${dst}`,
+    syncSkippedSource: (src) => `跳过（源文件不存在）: ${src}`,
+    syncSkippedTarget: (dst) => `跳过（目标文件不存在）: ${dst}`,
+    syncSkippedDirSource: (src) => `跳过（源目录不存在）: ${src}`,
+    syncSkippedDirTarget: (dst) => `跳过（目标目录不存在）: ${dst}`,
+    syncSummary: (updated, skipped, total) => `同步完成：updated=${updated}, skipped=${skipped}, total=${total}`,
+    fnpackStart: (filePath) => `开始执行 fnpack 打包：${filePath}`,
+    fnpackUnsupportedPlatform: (platform, arch) => `不支持的平台或架构: ${platform}/${arch}`,
+    fnpackMissingBinary: (fileName) =>
+      `未找到 fnpack 可执行文件 ${fileName}（已检查 scripts/fnpack 与 script/fnpack）`,
+    fnpackBuildFailed: (code) => `fnpack build 执行失败，退出码: ${code}`,
+    fnpackBuildOutput: (filePath) => `已生成 fpk 文件：${filePath}`,
+    fnpackBuildOutputUnknown: 'fnpack build 执行完成，但未检测到新增或更新的 .fpk 文件',
     buildFailed: (message) => `构建失败: ${message}`,
     interactiveRequired:
       '需要交互式终端。请在本地命令行执行：node scripts/build.js'
@@ -105,6 +153,20 @@ function createI18n(lang) {
       `Build complete (titlebar=${titlebar}, launchpad=${launchpad}, brand=${brandLabel}).`,
     themeSkipped: 'skipped (default)',
     removedLegacy: (filePath) => `Removed legacy file ${filePath}`,
+    syncStart: 'Syncing root assets to fpk templates',
+    syncUpdated: (src, dst) => `Synced ${src} -> ${dst}`,
+    syncSkippedSource: (src) => `Skipped (missing source): ${src}`,
+    syncSkippedTarget: (dst) => `Skipped (missing target): ${dst}`,
+    syncSkippedDirSource: (src) => `Skipped (missing source dir): ${src}`,
+    syncSkippedDirTarget: (dst) => `Skipped (missing target dir): ${dst}`,
+    syncSummary: (updated, skipped, total) => `Sync done: updated=${updated}, skipped=${skipped}, total=${total}`,
+    fnpackStart: (filePath) => `Running fnpack build with ${filePath}`,
+    fnpackUnsupportedPlatform: (platform, arch) => `Unsupported platform/arch: ${platform}/${arch}`,
+    fnpackMissingBinary: (fileName) =>
+      `Cannot find fnpack binary ${fileName} (checked scripts/fnpack and script/fnpack)`,
+    fnpackBuildFailed: (code) => `fnpack build failed with exit code: ${code}`,
+    fnpackBuildOutput: (filePath) => `Generated fpk package: ${filePath}`,
+    fnpackBuildOutputUnknown: 'fnpack build completed, but no new/updated .fpk artifact was detected',
     buildFailed: (message) => `Build failed: ${message}`,
     interactiveRequired:
       'Interactive terminal required. Please run: node scripts/build.js'
@@ -362,6 +424,231 @@ async function cleanupLegacyFiles(t, paint) {
   }
 }
 
+function toPosixPath(filePath) {
+  return filePath.split(path.sep).join('/');
+}
+
+async function pathExists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function filesAreEqual(sourcePath, targetPath) {
+  const [sourceStat, targetStat] = await Promise.all([fs.stat(sourcePath), fs.stat(targetPath)]);
+  if (sourceStat.size !== targetStat.size) {
+    return false;
+  }
+
+  const [sourceBuffer, targetBuffer] = await Promise.all([
+    fs.readFile(sourcePath),
+    fs.readFile(targetPath)
+  ]);
+  return sourceBuffer.equals(targetBuffer);
+}
+
+async function listFilesRecursively(directoryPath, basePath = directoryPath) {
+  const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      const nestedFiles = await listFilesRecursively(fullPath, basePath);
+      files.push(...nestedFiles);
+      continue;
+    }
+    if (entry.isFile()) {
+      files.push(path.relative(basePath, fullPath));
+    }
+  }
+
+  return files.sort((left, right) => left.localeCompare(right));
+}
+
+async function syncOneFile(
+  sourceRelativePath,
+  targetRelativePath,
+  stats,
+  t,
+  paint,
+  options = {}
+) {
+  const sourcePath = path.join(ROOT_DIR, sourceRelativePath);
+  const targetPath = path.join(ROOT_DIR, targetRelativePath);
+  const allowCreateTarget = options.allowCreateTarget === true;
+  stats.total += 1;
+
+  if (!(await pathExists(sourcePath))) {
+    console.log(paint.warn(`${ICONS.warn} ${t.syncSkippedSource(toPosixPath(sourceRelativePath))}`));
+    stats.skipped += 1;
+    return;
+  }
+
+  if (!(await pathExists(targetPath))) {
+    if (!allowCreateTarget) {
+      console.log(paint.warn(`${ICONS.warn} ${t.syncSkippedTarget(toPosixPath(targetRelativePath))}`));
+      stats.skipped += 1;
+      return;
+    }
+
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(sourcePath, targetPath);
+    console.log(
+      paint.ok(
+        `${ICONS.ok} ${t.syncUpdated(toPosixPath(sourceRelativePath), toPosixPath(targetRelativePath))}`
+      )
+    );
+    stats.updated += 1;
+    return;
+  }
+
+  if (await filesAreEqual(sourcePath, targetPath)) {
+    return;
+  }
+
+  await fs.copyFile(sourcePath, targetPath);
+  console.log(
+    paint.ok(
+      `${ICONS.ok} ${t.syncUpdated(toPosixPath(sourceRelativePath), toPosixPath(targetRelativePath))}`
+    )
+  );
+  stats.updated += 1;
+}
+
+async function syncAssetsToFpk(t, paint) {
+  const stats = {
+    updated: 0,
+    skipped: 0,
+    total: 0
+  };
+
+  console.log('');
+  console.log(paint.info(`${ICONS.info} ${t.syncStart}`));
+
+  for (const [sourceRelativePath, targetRelativePath] of FPK_SYNC_FILE_MAPPINGS) {
+    await syncOneFile(sourceRelativePath, targetRelativePath, stats, t, paint);
+  }
+
+  for (const [sourceDirRelativePath, targetDirRelativePath] of FPK_SYNC_DIR_MAPPINGS) {
+    const sourceDirPath = path.join(ROOT_DIR, sourceDirRelativePath);
+    const targetDirPath = path.join(ROOT_DIR, targetDirRelativePath);
+
+    if (!(await pathExists(sourceDirPath))) {
+      console.log(paint.warn(`${ICONS.warn} ${t.syncSkippedDirSource(toPosixPath(sourceDirRelativePath))}`));
+      continue;
+    }
+
+    await fs.mkdir(targetDirPath, { recursive: true });
+
+    const sourceFiles = await listFilesRecursively(sourceDirPath);
+    for (const relativeFilePath of sourceFiles) {
+      const sourceRelativePath = toPosixPath(path.join(sourceDirRelativePath, relativeFilePath));
+      const targetRelativePath = toPosixPath(path.join(targetDirRelativePath, relativeFilePath));
+      await syncOneFile(sourceRelativePath, targetRelativePath, stats, t, paint, {
+        allowCreateTarget: true
+      });
+    }
+  }
+
+  console.log(paint.info(`${ICONS.info} ${t.syncSummary(stats.updated, stats.skipped, stats.total)}`));
+}
+
+function resolveFnpackBinaryName(t) {
+  const binaryName = FNPACK_BINARIES[process.platform]?.[process.arch];
+  if (!binaryName) {
+    throw new Error(t.fnpackUnsupportedPlatform(process.platform, process.arch));
+  }
+  return binaryName;
+}
+
+async function resolveFnpackBinaryPath(t) {
+  const binaryName = resolveFnpackBinaryName(t);
+  for (const directory of FNPACK_DIR_CANDIDATES) {
+    const candidate = path.join(directory, binaryName);
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(t.fnpackMissingBinary(binaryName));
+}
+
+async function listFpkArtifacts(directoryPath) {
+  const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+  const artifacts = new Map();
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.fpk')) {
+      continue;
+    }
+    const filePath = path.join(directoryPath, entry.name);
+    const stat = await fs.stat(filePath);
+    artifacts.set(entry.name, stat.mtimeMs);
+  }
+
+  return artifacts;
+}
+
+function detectChangedFpkArtifact(beforeArtifacts, afterArtifacts, directoryPath) {
+  let newestArtifactName = null;
+  let newestArtifactMtime = -1;
+
+  for (const [name, mtime] of afterArtifacts.entries()) {
+    const previousMtime = beforeArtifacts.get(name);
+    const changed = previousMtime === undefined || mtime > previousMtime;
+    if (!changed) continue;
+    if (mtime > newestArtifactMtime) {
+      newestArtifactMtime = mtime;
+      newestArtifactName = name;
+    }
+  }
+
+  if (!newestArtifactName) return null;
+  return path.join(directoryPath, newestArtifactName);
+}
+
+async function runFnpackBuild(t, paint) {
+  const fnpackPath = await resolveFnpackBinaryPath(t);
+  const fnpackRelativePath = toPosixPath(path.relative(ROOT_DIR, fnpackPath));
+
+  if (process.platform !== 'win32') {
+    await fs.chmod(fnpackPath, 0o755).catch(() => undefined);
+  }
+
+  const beforeArtifacts = await listFpkArtifacts(FPK_APP_DIR);
+  console.log('');
+  console.log(paint.info(`${ICONS.info} ${t.fnpackStart(fnpackRelativePath)}`));
+
+  await new Promise((resolve, reject) => {
+    const command = spawn(fnpackPath, ['build', '--directory', './'], {
+      cwd: FPK_APP_DIR,
+      stdio: 'inherit'
+    });
+
+    command.once('error', reject);
+    command.once('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(t.fnpackBuildFailed(code ?? 'unknown')));
+    });
+  });
+
+  const afterArtifacts = await listFpkArtifacts(FPK_APP_DIR);
+  const artifactPath = detectChangedFpkArtifact(beforeArtifacts, afterArtifacts, FPK_APP_DIR);
+  if (artifactPath) {
+    console.log(paint.ok(`${ICONS.ok} ${t.fnpackBuildOutput(toPosixPath(path.relative(ROOT_DIR, artifactPath)))}`));
+    return;
+  }
+
+  console.log(paint.dim(`${ICONS.info} ${t.fnpackBuildOutputUnknown}`));
+}
+
 async function askQuestions(paint) {
   if (!stdin.isTTY || !stdout.isTTY) {
     throw new Error(createI18n('en').interactiveRequired);
@@ -527,6 +814,8 @@ async function main() {
     writeText(path.join(OUT_DIR, 'mod.css'), mergedCss, t, paint)
   ]);
   await cleanupLegacyFiles(t, paint);
+  await syncAssetsToFpk(t, paint);
+  await runFnpackBuild(t, paint);
 
   const brandLabel = themeEnabled ? brandColor : t.themeSkipped;
   console.log(paint.ok(`${ICONS.ok} ${t.buildComplete(titlebar, launchpad, brandLabel)}`));

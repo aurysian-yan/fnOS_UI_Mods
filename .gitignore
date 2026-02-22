@@ -3,3 +3,7 @@ fpk/fnpack-1.2.1-darwin-arm64
 fpk/fnpack-1.2.1-windows-amd64.exe
 ssh/mod.js
 ssh/mod.css
+*.fpk
+/fpk/FnOS_UI_Mods/app/www/assets/templates
+/fpk/FnOS_UI_Mods/app/www/fonts
+/fpk/FnOS_UI_Mods/app/www/prefect_icon
