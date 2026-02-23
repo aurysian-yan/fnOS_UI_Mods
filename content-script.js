@@ -13,6 +13,8 @@
   const DESKTOP_ICON_LAYOUT_STYLE_ID = 'fnos-ui-mods-desktop-icon-layout-style';
   const DESKTOP_ICON_MOD_STYLE_ID = 'fnos-ui-mods-desktop-icon-mod-style';
   const LAUNCHPAD_ICON_SCALE_STYLE_ID = 'fnos-ui-mods-launchpad-icon-scale-style';
+  const WINDOW_ANIMATION_BLUR_DISABLED_CLASS =
+    'fnos-window-animation-blur-disabled';
   const LAUNCHPAD_ICON_ORIGINAL_SRC_ATTR = 'data-fnos-original-src';
   const LAUNCHPAD_ICON_ORIGINAL_DATA_SRC_ATTR = 'data-fnos-original-data-src';
 
@@ -83,6 +85,7 @@
 
   let currentBrandColor = THEME_DEFAULT_BRAND;
   let currentBasePresetEnabled = true;
+  let currentWindowAnimationBlurEnabled = true;
   let currentTitlebarStyle = 'windows';
   let currentLaunchpadStyle = 'classic';
   let currentDesktopIconLayoutEnabled = true;
@@ -1252,6 +1255,16 @@
     clearBrandPaletteInline(document.getElementById('root'));
   }
 
+  function setWindowAnimationBlurEnabled(nextEnabled) {
+    currentWindowAnimationBlurEnabled = Boolean(nextEnabled);
+    const root = document.documentElement;
+    if (!(root instanceof HTMLElement)) return;
+    root.classList.toggle(
+      WINDOW_ANIMATION_BLUR_DISABLED_CLASS,
+      !currentWindowAnimationBlurEnabled
+    );
+  }
+
   function injectScript() {
     if (document.getElementById(SCRIPT_ID)) return;
 
@@ -1282,6 +1295,7 @@
 
   function startInject(
     basePresetEnabled,
+    windowAnimationBlurEnabled,
     titlebarStyle,
     launchpadStyle,
     desktopIconLayoutEnabled,
@@ -1301,6 +1315,7 @@
     currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
     currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
     setBasePresetEnabled(basePresetEnabled);
+    setWindowAnimationBlurEnabled(windowAnimationBlurEnabled);
     updateDesktopIconLayout(
       desktopIconPerColumn,
       desktopIconLayoutMode,
@@ -1392,6 +1407,7 @@
 
         startInject(
           message.basePresetEnabled ?? currentBasePresetEnabled,
+          message.windowAnimationBlurEnabled ?? currentWindowAnimationBlurEnabled,
           message.titlebarStyle ?? currentTitlebarStyle,
           message.launchpadStyle ?? currentLaunchpadStyle,
           normalizeDesktopIconLayoutEnabled(
@@ -1461,6 +1477,7 @@
       enabledOrigins: [],
       autoEnableSuspectedFnOS: true,
       basePresetEnabled: true,
+      windowAnimationBlurEnabled: true,
       titlebarStyle: 'windows',
       launchpadStyle: 'classic',
       desktopIconLayoutEnabled: true,
@@ -1485,6 +1502,7 @@
       enabledOrigins,
       autoEnableSuspectedFnOS,
       basePresetEnabled,
+      windowAnimationBlurEnabled,
       titlebarStyle,
       launchpadStyle,
       desktopIconLayoutEnabled,
@@ -1535,6 +1553,7 @@
         );
         startInject(
           basePresetEnabled,
+          windowAnimationBlurEnabled,
           titlebarStyle,
           launchpadStyle,
           normalizedDesktopIconLayoutEnabled,
@@ -1552,6 +1571,7 @@
         );
       } else {
         currentBasePresetEnabled = Boolean(basePresetEnabled);
+        currentWindowAnimationBlurEnabled = Boolean(windowAnimationBlurEnabled);
         currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
         currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
         currentDesktopIconLayoutEnabled = normalizeDesktopIconLayoutEnabled(
@@ -1615,6 +1635,17 @@
             currentLaunchpadStyle,
             currentBasePresetEnabled
           );
+        }
+      }
+
+      if (changes.windowAnimationBlurEnabled) {
+        const nextWindowAnimationBlurEnabled = Boolean(
+          changes.windowAnimationBlurEnabled.newValue
+        );
+        if (!isInjectionActive) {
+          currentWindowAnimationBlurEnabled = nextWindowAnimationBlurEnabled;
+        } else {
+          setWindowAnimationBlurEnabled(nextWindowAnimationBlurEnabled);
         }
       }
 

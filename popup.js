@@ -9,6 +9,9 @@
   const siteToggleEl = document.getElementById("siteToggle");
   const autoSuspectedFnOSEl = document.getElementById("autoSuspectedFnOS");
   const basePresetEnabledEl = document.getElementById("basePresetEnabled");
+  const windowAnimationBlurEnabledEl = document.getElementById(
+    "windowAnimationBlurEnabled"
+  );
   const styleWindowsEl = document.getElementById("styleWindows");
   const styleMacEl = document.getElementById("styleMac");
   const styleClassicLaunchpadEl = document.getElementById("styleClassicLaunchpad");
@@ -1519,6 +1522,9 @@
     if (!shouldInject) return;
 
     const basePresetEnabled = Boolean(basePresetEnabledEl?.checked ?? true);
+    const windowAnimationBlurEnabled = Boolean(
+      windowAnimationBlurEnabledEl?.checked ?? true
+    );
     const titlebarStyle = styleMacEl.checked ? "mac" : "windows";
     const launchpadStyle = styleSpotlightLaunchpadEl.checked
       ? "spotlight"
@@ -1543,6 +1549,7 @@
       await chrome.tabs.sendMessage(tab.id, {
         type: "FNOS_APPLY",
         basePresetEnabled,
+        windowAnimationBlurEnabled,
         titlebarStyle,
         launchpadStyle,
         desktopIconLayoutEnabled,
@@ -1655,6 +1662,7 @@
     siteToggleEl.disabled = true;
     autoSuspectedFnOSEl.disabled = true;
     if (basePresetEnabledEl) basePresetEnabledEl.disabled = true;
+    if (windowAnimationBlurEnabledEl) windowAnimationBlurEnabledEl.disabled = true;
     styleWindowsEl.disabled = true;
     styleMacEl.disabled = true;
     styleClassicLaunchpadEl.disabled = true;
@@ -1704,6 +1712,7 @@
     enabledOrigins: [],
     autoEnableSuspectedFnOS: true,
     basePresetEnabled: true,
+    windowAnimationBlurEnabled: true,
     titlebarStyle: "windows",
     launchpadStyle: "classic",
     desktopIconLayoutEnabled: true,
@@ -1779,6 +1788,16 @@
   autoSuspectedFnOSEl.checked = Boolean(state.autoEnableSuspectedFnOS);
   if (basePresetEnabledEl) {
     basePresetEnabledEl.checked = Boolean(state.basePresetEnabled);
+  }
+  const windowAnimationBlurEnabled =
+    typeof state.windowAnimationBlurEnabled === "boolean"
+      ? state.windowAnimationBlurEnabled
+      : true;
+  if (windowAnimationBlurEnabledEl) {
+    windowAnimationBlurEnabledEl.checked = windowAnimationBlurEnabled;
+  }
+  if (state.windowAnimationBlurEnabled !== windowAnimationBlurEnabled) {
+    await safeSyncSet({ windowAnimationBlurEnabled });
   }
 
   const titlebarStyle = state.titlebarStyle === "mac" ? "mac" : "windows";
@@ -1873,6 +1892,15 @@
   if (basePresetEnabledEl) {
     basePresetEnabledEl.addEventListener("change", async () => {
       await applyBasePresetEnabled(basePresetEnabledEl.checked, true);
+    });
+  }
+
+  if (windowAnimationBlurEnabledEl) {
+    windowAnimationBlurEnabledEl.addEventListener("change", async () => {
+      await safeSyncSet({
+        windowAnimationBlurEnabled: windowAnimationBlurEnabledEl.checked
+      });
+      await applyToCurrentTabIfNeeded();
     });
   }
 

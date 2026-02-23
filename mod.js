@@ -739,9 +739,11 @@ function setupTaskbarItemAnimations() {
     const EXIT_GHOST_CLASS = 'fnos-taskbar-item--exit-ghost';
     const TASKBAR_LIST_SELECTOR =
         '.scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2';
-    const ENTER_DURATION_MS = 320;
-    const EXIT_DURATION_MS = 260;
-    const LIST_RESIZE_DURATION_MS = 260;
+    const ENTER_DURATION_MS = 300;
+    const EXIT_DURATION_MS = 240;
+    const LIST_RESIZE_DURATION_MS = 220;
+    const ENABLE_LIST_RESIZE_ANIMATION = true;
+    const MAX_LIST_RESIZE_ANIMATION_DELTA_PX = 140;
     const trackedEntries = new WeakSet();
     const knownEntryRects = new WeakMap();
     const knownListHeights = new WeakMap();
@@ -813,6 +815,40 @@ function setupTaskbarItemAnimations() {
         knownListHeights.set(listEl, rect.height);
     }
 
+    function measureTaskbarListNaturalHeight(listEl) {
+        if (!(listEl instanceof HTMLElement)) return 0;
+        if (!(document.body instanceof HTMLElement)) {
+            const fallbackRect = listEl.getBoundingClientRect();
+            return fallbackRect.height > 0 ? fallbackRect.height : 0;
+        }
+
+        const clone = listEl.cloneNode(true);
+        if (!(clone instanceof HTMLElement)) return 0;
+        const renderedWidth = listEl.getBoundingClientRect().width;
+
+        clone.style.position = 'fixed';
+        clone.style.left = '-10000px';
+        clone.style.top = '-10000px';
+        clone.style.right = 'auto';
+        clone.style.bottom = 'auto';
+        clone.style.inset = 'auto';
+        clone.style.width = renderedWidth > 0 ? `${renderedWidth}px` : 'auto';
+        clone.style.visibility = 'hidden';
+        clone.style.pointerEvents = 'none';
+        clone.style.height = 'auto';
+        clone.style.minHeight = '0';
+        clone.style.maxHeight = 'none';
+        clone.style.overflow = 'visible';
+        clone.style.transition = 'none';
+        clone.style.zIndex = '-1';
+
+        document.body.appendChild(clone);
+        const naturalHeight = clone.getBoundingClientRect().height;
+        clone.remove();
+
+        return naturalHeight > 0 ? naturalHeight : 0;
+    }
+
     function scheduleSnapshot() {
         if (snapshotScheduled) return;
         snapshotScheduled = true;
@@ -830,51 +866,78 @@ function setupTaskbarItemAnimations() {
         if (!(listEl instanceof HTMLElement)) return;
         const previousHeight = knownListHeights.get(listEl);
         const existingTimer = listResizeTimers.get(listEl);
+        const clearInlineResizeStyle = () => {
+            listEl.style.removeProperty('transition');
+            listEl.style.removeProperty('overflow');
+        };
+        const applyFinalHeight = (height) => {
+            listEl.style.transition = 'none';
+            listEl.style.removeProperty('height');
+            clearInlineResizeStyle();
+            knownListHeights.set(listEl, height);
+        };
+
         if (existingTimer) {
             window.clearTimeout(existingTimer);
             listResizeTimers.delete(listEl);
+            clearInlineResizeStyle();
+        }
+
+        const renderedHeight = listEl.getBoundingClientRect().height;
+        const measuredNaturalHeight = measureTaskbarListNaturalHeight(listEl);
+        const nextHeight = measuredNaturalHeight > 0 ? measuredNaturalHeight : renderedHeight;
+        let fromHeight =
+            Number.isFinite(previousHeight) && previousHeight > 0
+                ? previousHeight
+                : renderedHeight;
+
+        if (existingTimer && renderedHeight > 0) {
+            // 中断上一段动画时，从当前渲染高度继续，避免突跳
+            fromHeight = renderedHeight;
+        }
+
+        if (nextHeight > 0 && (!Number.isFinite(fromHeight) || fromHeight <= 0)) {
+            fromHeight = nextHeight;
+        }
+
+        if (shouldReduceMotion() || !ENABLE_LIST_RESIZE_ANIMATION) {
+            if (nextHeight > 0) {
+                applyFinalHeight(nextHeight);
+            }
+            return;
+        }
+
+        if (!Number.isFinite(fromHeight) || fromHeight <= 0 || nextHeight <= 0) {
+            if (nextHeight > 0) {
+                applyFinalHeight(nextHeight);
+            }
+            return;
+        }
+        if (Math.abs(nextHeight - fromHeight) < 0.5) {
+            applyFinalHeight(nextHeight);
+            return;
+        }
+        if (Math.abs(nextHeight - fromHeight) > MAX_LIST_RESIZE_ANIMATION_DELTA_PX) {
+            applyFinalHeight(nextHeight);
+            return;
         }
 
         listEl.style.transition = 'none';
         listEl.style.overflow = 'hidden';
-        listEl.style.height = 'auto';
-        const nextHeight = listEl.getBoundingClientRect().height;
-        if (!Number.isFinite(previousHeight) || previousHeight <= 0 || nextHeight <= 0) {
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
-            if (nextHeight > 0) {
-                knownListHeights.set(listEl, nextHeight);
-            }
-            return;
-        }
-        if (Math.abs(nextHeight - previousHeight) < 0.5) {
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
-            knownListHeights.set(listEl, nextHeight);
-            return;
-        }
-        if (shouldReduceMotion()) {
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
-            knownListHeights.set(listEl, nextHeight);
-            return;
-        }
-
-        listEl.style.height = `${previousHeight}px`;
+        listEl.style.height = `${fromHeight}px`;
         void listEl.offsetHeight;
 
-        listEl.style.transition = `height ${LIST_RESIZE_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
-        listEl.style.height = `${nextHeight}px`;
-        knownListHeights.set(listEl, nextHeight);
+        window.requestAnimationFrame(() => {
+            if (!listEl.isConnected) return;
+            listEl.style.transition = `height ${LIST_RESIZE_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
+            listEl.style.height = `${nextHeight}px`;
+        });
 
         const timerId = window.setTimeout(() => {
             if (!listEl.isConnected) return;
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
+            const measuredFinalHeight = measureTaskbarListNaturalHeight(listEl);
+            const finalHeight = measuredFinalHeight > 0 ? measuredFinalHeight : nextHeight;
+            applyFinalHeight(finalHeight);
             listResizeTimers.delete(listEl);
             scheduleSnapshot();
         }, LIST_RESIZE_DURATION_MS + 40);
@@ -889,16 +952,43 @@ function setupTaskbarItemAnimations() {
         trackedEntries.add(entryEl);
         snapshotEntryRect(entryEl);
         if (shouldReduceMotion()) return;
-
         entryEl.classList.remove(ENTER_CLASS);
-        void entryEl.offsetWidth;
-        entryEl.classList.add(ENTER_CLASS);
 
-        window.setTimeout(() => {
+        if (typeof entryEl.animate === 'function') {
+            entryEl.style.willChange = 'transform, opacity';
+            const animation = entryEl.animate(
+                [
+                    { opacity: 0, transform: 'translate3d(0, 5px, 0) scale(0.84)' },
+                    { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1.03)', offset: 0.6 },
+                    { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' }
+                ],
+                {
+                    duration: ENTER_DURATION_MS,
+                    easing: 'cubic-bezier(0.22, 0.85, 0.24, 1)',
+                    fill: 'both'
+                }
+            );
+
+            const clearAfterAnimation = () => {
+                if (!entryEl.isConnected) return;
+                entryEl.style.removeProperty('will-change');
+                snapshotEntryRect(entryEl);
+            };
+            animation.addEventListener('finish', clearAfterAnimation, { once: true });
+            animation.addEventListener('cancel', clearAfterAnimation, { once: true });
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
             if (!entryEl.isConnected) return;
-            entryEl.classList.remove(ENTER_CLASS);
-            snapshotEntryRect(entryEl);
-        }, ENTER_DURATION_MS + 40);
+            entryEl.classList.add(ENTER_CLASS);
+
+            window.setTimeout(() => {
+                if (!entryEl.isConnected) return;
+                entryEl.classList.remove(ENTER_CLASS);
+                snapshotEntryRect(entryEl);
+            }, ENTER_DURATION_MS + 40);
+        });
     }
 
     function animateTaskbarItemExit(entryEl) {

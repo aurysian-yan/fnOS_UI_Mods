@@ -26,11 +26,45 @@
 
 /* ========= 窗口 ========= */
 
+:root {
+    --fnos-window-backdrop-static-blur: 32px;
+    --fnos-window-motion-backdrop-start-blur: 0px;
+    --fnos-window-motion-backdrop-end-blur: 32px;
+    --fnos-window-enter-filter-start-blur: 0px;
+    --fnos-window-enter-filter-end-blur: 0px;
+    --fnos-window-exit-close-filter-start-blur: 0px;
+    --fnos-window-exit-close-filter-end-blur: 10px;
+    --fnos-window-exit-minimize-filter-start-blur: 0px;
+    --fnos-window-exit-minimize-filter-end-blur: 4px;
+    --fnos-window-restore-filter-start-blur: 0px;
+    --fnos-window-restore-filter-end-blur: 0px;
+}
+
+:root.fnos-window-animation-blur-disabled {
+    --fnos-window-motion-backdrop-start-blur: var(--fnos-window-backdrop-static-blur);
+    --fnos-window-motion-backdrop-end-blur: var(--fnos-window-backdrop-static-blur);
+    --fnos-window-enter-filter-start-blur: 0px;
+    --fnos-window-enter-filter-end-blur: 0px;
+    --fnos-window-exit-close-filter-start-blur: 0px;
+    --fnos-window-exit-close-filter-end-blur: 0px;
+    --fnos-window-exit-minimize-filter-start-blur: 0px;
+    --fnos-window-exit-minimize-filter-end-blur: 0px;
+    --fnos-window-restore-filter-start-blur: 0px;
+    --fnos-window-restore-filter-end-blur: 0px;
+}
+
+@property --fnos-window-current-backdrop-blur {
+    syntax: '<length>';
+    inherits: false;
+    initial-value: 32px;
+}
+
 .trim-ui__app-layout--window {
+    --fnos-window-current-backdrop-blur: var(--fnos-window-backdrop-static-blur);
     corner-shape: superellipse(2);
-    backdrop-filter: saturate(2) blur(32px) !important;
+    backdrop-filter: saturate(2) blur(var(--fnos-window-current-backdrop-blur)) !important;
     transform-origin: center top;
-    will-change: transform, opacity, filter;
+    will-change: transform, opacity, filter, backdrop-filter;
 }
 
 .trim-ui__app-layout--window.fnos-window--enter {
@@ -60,61 +94,69 @@
 
 @keyframes fnos-window-enter {
     from {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-start-blur);
         opacity: 0;
         transform: translateY(18px) scale(0.96);
-        filter: blur(6px);
+        filter: blur(var(--fnos-window-enter-filter-start-blur));
     }
 
     to {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-end-blur);
         opacity: 1;
         transform: translateY(0) scale(1);
-        filter: blur(0);
+        filter: blur(var(--fnos-window-enter-filter-end-blur));
     }
 }
 
 @keyframes fnos-window-exit-close {
     from {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-start-blur);
         opacity: 1;
         transform: translateY(0) scale(1);
-        filter: blur(0);
+        filter: blur(var(--fnos-window-exit-close-filter-start-blur));
     }
 
     to {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-end-blur);
         opacity: 0;
         transform: translateY(12px) scale(0.95);
-        filter: blur(10px);
+        filter: blur(var(--fnos-window-exit-close-filter-end-blur));
     }
 }
 
 @keyframes fnos-window-exit-minimize {
     from {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-start-blur);
         opacity: 1;
         transform: translateY(0) scale(1);
-        filter: blur(0);
+        filter: blur(var(--fnos-window-exit-minimize-filter-start-blur));
     }
 
     to {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-end-blur);
         opacity: 0;
         transform: translate3d(var(--fnos-window-minimize-dx, -60vw),
                 var(--fnos-window-minimize-dy, -10vh),
                 0) scale(var(--fnos-window-minimize-scale, 0.16));
-        filter: blur(4px);
+        filter: blur(var(--fnos-window-exit-minimize-filter-end-blur));
     }
 }
 
 @keyframes fnos-window-restore {
     from {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-start-blur);
         opacity: 0;
         transform: translate3d(var(--fnos-window-minimize-dx, -60vw),
                 var(--fnos-window-minimize-dy, -10vh),
                 0) scale(var(--fnos-window-minimize-scale, 0.16));
-        filter: blur(4px);
+        filter: blur(var(--fnos-window-restore-filter-start-blur));
     }
 
     to {
+        --fnos-window-current-backdrop-blur: var(--fnos-window-motion-backdrop-end-blur);
         opacity: 1;
         transform: translateX(0) scale(1);
-        filter: blur(0);
+        filter: blur(var(--fnos-window-restore-filter-end-blur));
     }
 }
 
@@ -325,28 +367,29 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
 @keyframes fnos-taskbar-item-enter {
     from {
         opacity: 0;
-        transform: scale(0.8);
-        filter: blur(4px);
+        transform: translate3d(0, 5px, 0) scale(0.84);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1.03);
     }
 
     to {
         opacity: 1;
-        transform: scale(1);
-        filter: blur(0px);
+        transform: translate3d(0, 0, 0) scale(1);
     }
 }
 
 @keyframes fnos-taskbar-item-exit {
     from {
         opacity: 1;
-        transform: scale(1);
-        filter: blur(0px);
+        transform: translate3d(0, 0, 0) scale(1);
     }
 
     to {
         opacity: 0;
-        transform: scale(0.8);
-        filter: blur(4px);
+        transform: translate3d(0, 4px, 0) scale(0.86);
     }
 }
 
@@ -358,18 +401,22 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     margin: 0 4px;
     mask-image: url("data:image/svg+xml;charset=utf-8;base64,PHN2ZyB3aWR0aD0iMzUyIiBoZWlnaHQ9IjM1MiIgdmlld0JveD0iMCAwIDM1MiAzNTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xNzYgMEMyMDUuODggMCAyMzIuNTA5IDAuMjk1NTE4IDI1NC4wOTMgMy4zMDI3M0MyNzUuNzQ1IDYuMzE5NjIgMzAwLjM4OSAxMy4wMDYgMzE5LjY5MSAzMi4zMDg2QzMzOC45OTQgNTEuNjExMiAzNDUuNjggNzYuMjU0NSAzNDguNjk3IDk3LjkwNzJDMzUxLjcwNCAxMTkuNDkxIDM1MiAxNDYuMTIgMzUyIDE3NkMzNTIgMjA1Ljg4IDM1MS43MDQgMjMyLjUwOSAzNDguNjk3IDI1NC4wOTNDMzQ1LjY4IDI3NS43NDUgMzM4Ljk5NCAzMDAuMzg5IDMxOS42OTEgMzE5LjY5MUMzMDAuMzg5IDMzOC45OTQgMjc1Ljc0NSAzNDUuNjggMjU0LjA5MyAzNDguNjk3QzIzMi41MDkgMzUxLjcwNCAyMDUuODggMzUyIDE3NiAzNTJDMTQ2LjEyIDM1MiAxMTkuNDkxIDM1MS43MDQgOTcuOTA3MiAzNDguNjk3Qzc2LjI1NDUgMzQ1LjY4IDUxLjYxMTIgMzM4Ljk5NCAzMi4zMDg2IDMxOS42OTFDMTMuMDA2IDMwMC4zODkgNi4zMTk2MiAyNzUuNzQ1IDMuMzAyNzMgMjU0LjA5M0MwLjI5NTUxOCAyMzIuNTA5IDAgMjA1Ljg4IDAgMTc2QzAgMTQ2LjEyIDAuMjk1NTE4IDExOS40OTEgMy4zMDI3MyA5Ny45MDcyQzYuMzE5NjIgNzYuMjU0NSAxMy4wMDYgNTEuNjExMiAzMi4zMDg2IDMyLjMwODZDNTEuNjExMiAxMy4wMDYgNzYuMjU0NSA2LjMxOTYyIDk3LjkwNzIgMy4zMDI3M0MxMTkuNDkxIDAuMjk1NTE4IDE0Ni4xMiAwIDE3NiAwWiIgZmlsbD0idXJsKCNwYWludDBfbGluZWFyXzNfMTApIi8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9InBhaW50MF9saW5lYXJfM18xMCIgeDE9IjE3NiIgeTE9IjQ4IiB4Mj0iMTc2IiB5Mj0iMzA0IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CjxzdG9wIG9mZnNldD0iMC4xNDM5MjgiIHN0b3AtY29sb3I9IiM3RUE5RkYiLz4KPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMjU2OEVEIi8+CjwvbGluZWFyR3JhZGllbnQ+CjwvZGVmcz4KPC9zdmc+Cg==");
     mask-size: 44px;
-    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
+    transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1), background-color 0.2s ease-in-out, opacity 0.2s ease-in-out !important;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    contain: paint;
 }
 
 .flex.h-10.w-\[47px\].items-center.justify-center.gap-x-2.border-0.\!border-l-\[3px\].border-solid.border-transparent.hover\:bg-white-10.fnos-taskbar-item--enter {
     will-change: transform, opacity;
-    animation: fnos-taskbar-item-enter 0.28s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+    animation: fnos-taskbar-item-enter 0.3s cubic-bezier(0.22, 0.85, 0.24, 1) both;
 }
 
 .fnos-taskbar-item--exit-ghost {
     pointer-events: none !important;
     will-change: transform, opacity;
-    animation: fnos-taskbar-item-exit 0.22s cubic-bezier(0.4, 0.2, 0.2, 1) both !important;
+    animation: fnos-taskbar-item-exit 0.24s cubic-bezier(0.4, 0.2, 0.2, 1) both !important;
+    contain: paint;
 }
 
 @media (prefers-reduced-motion: reduce) {
