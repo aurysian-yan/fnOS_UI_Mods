@@ -862,8 +862,54 @@ function setupTaskbarItemAnimations() {
         });
     }
 
-    function animateTaskbarListResize(listEl) {
+    function readCssPixelValue(value) {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function getTaskbarItemOuterHeight(entryEl) {
+        if (!(entryEl instanceof HTMLElement)) return 0;
+
+        const rect = entryEl.getBoundingClientRect();
+        let height = rect.height;
+        if (!(height > 0)) {
+            const cachedRect = knownEntryRects.get(entryEl);
+            height = cachedRect && cachedRect.height > 0 ? cachedRect.height : 0;
+        }
+        if (!(height > 0)) return 0;
+
+        if (!entryEl.isConnected) {
+            return height;
+        }
+
+        const style = window.getComputedStyle(entryEl);
+        const marginTop = readCssPixelValue(style.marginTop);
+        const marginBottom = readCssPixelValue(style.marginBottom);
+        return height + marginTop + marginBottom;
+    }
+
+    function getTaskbarListRowGap(listEl) {
+        if (!(listEl instanceof HTMLElement)) return 0;
+        const style = window.getComputedStyle(listEl);
+        const rowGap = readCssPixelValue(style.rowGap);
+        if (rowGap > 0) return rowGap;
+        return readCssPixelValue(style.gap);
+    }
+
+    function getTaskbarItemCount(listEl) {
+        if (!(listEl instanceof HTMLElement)) return 0;
+        let count = 0;
+        listEl.querySelectorAll(TASKBAR_ITEM_SELECTOR).forEach((entryEl) => {
+            if (!(entryEl instanceof HTMLElement)) return;
+            if (!isTaskbarAppItem(entryEl)) return;
+            count += 1;
+        });
+        return count;
+    }
+
+    function animateTaskbarListResize(listEl, options = {}) {
         if (!(listEl instanceof HTMLElement)) return;
+        const deltaHeight = Number.isFinite(options.deltaHeight) ? options.deltaHeight : null;
         const previousHeight = knownListHeights.get(listEl);
         const existingTimer = listResizeTimers.get(listEl);
         const clearInlineResizeStyle = () => {
@@ -885,11 +931,21 @@ function setupTaskbarItemAnimations() {
 
         const renderedHeight = listEl.getBoundingClientRect().height;
         const measuredNaturalHeight = measureTaskbarListNaturalHeight(listEl);
-        const nextHeight = measuredNaturalHeight > 0 ? measuredNaturalHeight : renderedHeight;
+        let nextHeight = measuredNaturalHeight > 0 ? measuredNaturalHeight : renderedHeight;
         let fromHeight =
             Number.isFinite(previousHeight) && previousHeight > 0
                 ? previousHeight
                 : renderedHeight;
+
+        if (
+            Number.isFinite(deltaHeight) &&
+            Math.abs(deltaHeight) > 0.1 &&
+            Number.isFinite(previousHeight) &&
+            previousHeight > 0
+        ) {
+            nextHeight = Math.max(0, previousHeight + deltaHeight);
+            fromHeight = previousHeight;
+        }
 
         if (existingTimer && renderedHeight > 0) {
             // 中断上一段动画时，从当前渲染高度继续，避免突跳
@@ -1036,28 +1092,57 @@ function setupTaskbarItemAnimations() {
 
     function handleTaskbarListMutations(mutations) {
         if (!(currentTaskbarList instanceof HTMLElement)) return;
-        let hasEntryMutation = false;
+        const addedEntries = new Set();
+        const removedEntries = new Set();
 
         mutations.forEach((mutation) => {
             if (mutation.type !== 'childList') return;
 
             mutation.removedNodes.forEach((node) => {
                 collectTaskbarItems(node).forEach((entryEl) => {
-                    hasEntryMutation = true;
-                    animateTaskbarItemExit(entryEl);
+                    removedEntries.add(entryEl);
                 });
             });
 
             mutation.addedNodes.forEach((node) => {
                 collectTaskbarItems(node).forEach((entryEl) => {
-                    hasEntryMutation = true;
-                    animateTaskbarItemEnter(entryEl);
+                    addedEntries.add(entryEl);
                 });
             });
         });
 
-        if (!hasEntryMutation) return;
-        animateTaskbarListResize(currentTaskbarList);
+        addedEntries.forEach((entryEl) => {
+            if (!removedEntries.has(entryEl)) return;
+            addedEntries.delete(entryEl);
+            removedEntries.delete(entryEl);
+        });
+
+        const addedCount = addedEntries.size;
+        const removedCount = removedEntries.size;
+        if (!addedCount && !removedCount) return;
+
+        removedEntries.forEach((entryEl) => {
+            animateTaskbarItemExit(entryEl);
+        });
+        addedEntries.forEach((entryEl) => {
+            animateTaskbarItemEnter(entryEl);
+        });
+
+        const addedHeight = Array.from(addedEntries).reduce((sum, entryEl) => {
+            return sum + getTaskbarItemOuterHeight(entryEl);
+        }, 0);
+        const removedHeight = Array.from(removedEntries).reduce((sum, entryEl) => {
+            return sum + getTaskbarItemOuterHeight(entryEl);
+        }, 0);
+        const currentCount = getTaskbarItemCount(currentTaskbarList);
+        const previousCount = Math.max(0, currentCount - addedCount + removedCount);
+        const rowGap = getTaskbarListRowGap(currentTaskbarList);
+        const previousGapCount = Math.max(0, previousCount - 1);
+        const currentGapCount = Math.max(0, currentCount - 1);
+        const gapDeltaHeight = rowGap * (currentGapCount - previousGapCount);
+        const deltaHeight = addedHeight - removedHeight + gapDeltaHeight;
+
+        animateTaskbarListResize(currentTaskbarList, { deltaHeight });
         scheduleSnapshot();
     }
 
