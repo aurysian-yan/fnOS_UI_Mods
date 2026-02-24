@@ -36,6 +36,24 @@
     'linear-gradient(120deg, rgba(8, 14, 28, 0.35), rgba(8, 14, 28, 0.18))';
   const LOCKSCREEN_TEXT_AVATAR_CLASS = 'fnos-lockscreen-text-avatar';
   const LOCKSCREEN_TEXT_AVATAR_BOUND_ATTR = 'data-fnos-avatar-bound';
+  const LOCKSCREEN_DEFAULT_USERNAME_MAX = 80;
+  const LOCKSCREEN_DEFAULT_USERNAME_ROW_CLASS =
+    'fnos-lockscreen-default-username-row';
+  const LOCKSCREEN_DEFAULT_USERNAME_TEXT_CLASS =
+    'fnos-lockscreen-default-username-text';
+  const LOCKSCREEN_SWITCH_ACCOUNT_BUTTON_CLASS =
+    'fnos-lockscreen-switch-account';
+  const LOCKSCREEN_SWITCH_ACCOUNT_ICON_CLASS =
+    'fnos-lockscreen-switch-account-icon';
+  const LOCKSCREEN_SWITCH_ACCOUNT_LABEL_CLASS =
+    'fnos-lockscreen-switch-account-label';
+  const LOCKSCREEN_DEFAULT_USERNAME_FIELD_HIDDEN_ATTR =
+    'data-fnos-default-username-hidden';
+  const LOCKSCREEN_DEFAULT_USERNAME_FIELD_DISPLAY_ATTR =
+    'data-fnos-default-username-inline-display';
+  const LOCKSCREEN_DEFAULT_USERNAME_SWITCH_BOUND_ATTR =
+    'data-fnos-switch-account-bound';
+  const LOCKSCREEN_MANUAL_ACCOUNT_MODE_ATTR = 'data-fnos-manual-account-mode';
   const LOCKSCREEN_PINYIN_BOUNDARIES = [
     '\u963f',
     '\u516b',
@@ -140,6 +158,7 @@
   let currentUploadedFontFormat = '';
   let currentLoginWallpaperDataUrl = '';
   let currentLoginWallpaperFileName = '';
+  let currentLockscreenDefaultUsername = '';
   let currentLoginWallpaperResolvedDataUrl = '';
   let currentLoginWallpaperObjectUrl = '';
   let currentLaunchpadAppItems = [];
@@ -1380,6 +1399,199 @@
     );
   }
 
+  function normalizeLockscreenDefaultUsername(value) {
+    return normalizeText(value, LOCKSCREEN_DEFAULT_USERNAME_MAX);
+  }
+
+  function resolveLockscreenUsernameFieldContainer(usernameInput) {
+    if (!(usernameInput instanceof HTMLInputElement)) return null;
+    const container =
+      usernameInput.closest('.semi-form-field') ||
+      usernameInput.closest('.semi-input-wrapper')?.parentElement ||
+      usernameInput.parentElement;
+    return container instanceof HTMLElement ? container : null;
+  }
+
+  function setLockscreenUsernameInputValue(usernameInput, value) {
+    if (!(usernameInput instanceof HTMLInputElement)) return;
+    if (usernameInput.value === value) return;
+    usernameInput.value = value;
+    usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    usernameInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function hideLockscreenUsernameFieldContainer(fieldContainer) {
+    if (!(fieldContainer instanceof HTMLElement)) return;
+    if (
+      fieldContainer.getAttribute(LOCKSCREEN_DEFAULT_USERNAME_FIELD_HIDDEN_ATTR) ===
+      '1'
+    ) {
+      return;
+    }
+
+    fieldContainer.setAttribute(LOCKSCREEN_DEFAULT_USERNAME_FIELD_HIDDEN_ATTR, '1');
+    fieldContainer.setAttribute(
+      LOCKSCREEN_DEFAULT_USERNAME_FIELD_DISPLAY_ATTR,
+      fieldContainer.style.getPropertyValue('display') || ''
+    );
+    fieldContainer.style.setProperty('display', 'none', 'important');
+  }
+
+  function showLockscreenUsernameFieldContainer(fieldContainer) {
+    if (!(fieldContainer instanceof HTMLElement)) return;
+    if (
+      fieldContainer.getAttribute(LOCKSCREEN_DEFAULT_USERNAME_FIELD_HIDDEN_ATTR) !==
+      '1'
+    ) {
+      return;
+    }
+
+    const previousDisplay =
+      fieldContainer.getAttribute(LOCKSCREEN_DEFAULT_USERNAME_FIELD_DISPLAY_ATTR) ||
+      '';
+    fieldContainer.removeAttribute(LOCKSCREEN_DEFAULT_USERNAME_FIELD_HIDDEN_ATTR);
+    fieldContainer.removeAttribute(LOCKSCREEN_DEFAULT_USERNAME_FIELD_DISPLAY_ATTR);
+    if (previousDisplay) {
+      fieldContainer.style.setProperty('display', previousDisplay);
+    } else {
+      fieldContainer.style.removeProperty('display');
+    }
+  }
+
+  function syncLockscreenDefaultUsername() {
+    const loginForm = document.querySelector('.login-form');
+    if (!(loginForm instanceof HTMLElement)) return;
+    const loginInnerForm = loginForm.querySelector('form');
+    if (!(loginInnerForm instanceof HTMLElement)) return;
+
+    const usernameInput = loginInnerForm.querySelector(
+      'input#username, input[name="username"]'
+    );
+    const usernameFieldContainer =
+      resolveLockscreenUsernameFieldContainer(usernameInput);
+    const row = loginInnerForm.querySelector(
+      `.${LOCKSCREEN_DEFAULT_USERNAME_ROW_CLASS}`
+    );
+    const switchButton = loginForm.querySelector(
+      `.${LOCKSCREEN_SWITCH_ACCOUNT_BUTTON_CLASS}`
+    );
+    const normalizedUsername = normalizeLockscreenDefaultUsername(
+      currentLockscreenDefaultUsername
+    );
+
+    if (!(usernameInput instanceof HTMLInputElement) || !normalizedUsername) {
+      showLockscreenUsernameFieldContainer(usernameFieldContainer);
+      if (row instanceof HTMLElement) {
+        row.remove();
+      }
+      if (switchButton instanceof HTMLElement) {
+        switchButton.remove();
+      }
+      return;
+    }
+
+    const isManualMode =
+      loginInnerForm.getAttribute(LOCKSCREEN_MANUAL_ACCOUNT_MODE_ATTR) === '1';
+    if (isManualMode) {
+      showLockscreenUsernameFieldContainer(usernameFieldContainer);
+      if (row instanceof HTMLElement) {
+        row.remove();
+      }
+      if (switchButton instanceof HTMLElement) {
+        switchButton.remove();
+      }
+      return;
+    }
+
+    setLockscreenUsernameInputValue(usernameInput, normalizedUsername);
+    if (!(usernameFieldContainer instanceof HTMLElement)) return;
+
+    let usernameRow = row;
+    if (!(usernameRow instanceof HTMLElement)) {
+      usernameRow = document.createElement('div');
+      usernameRow.className = LOCKSCREEN_DEFAULT_USERNAME_ROW_CLASS;
+
+      const usernameText = document.createElement('span');
+      usernameText.className = LOCKSCREEN_DEFAULT_USERNAME_TEXT_CLASS;
+      usernameRow.appendChild(usernameText);
+    }
+
+    const usernameText = usernameRow.querySelector(
+      `.${LOCKSCREEN_DEFAULT_USERNAME_TEXT_CLASS}`
+    );
+    if (usernameText instanceof HTMLElement) {
+      usernameText.textContent = normalizedUsername;
+      usernameText.setAttribute('title', normalizedUsername);
+    }
+
+    let switchAccountButton =
+      switchButton instanceof HTMLButtonElement ? switchButton : null;
+    if (
+      !(switchAccountButton instanceof HTMLButtonElement) ||
+      switchAccountButton.parentElement !== loginForm
+    ) {
+      if (switchButton instanceof HTMLElement) {
+        switchButton.remove();
+      }
+      switchAccountButton = document.createElement('button');
+      switchAccountButton.type = 'button';
+      switchAccountButton.className = LOCKSCREEN_SWITCH_ACCOUNT_BUTTON_CLASS;
+      switchAccountButton.setAttribute('aria-label', '\u5207\u6362\u7528\u6237');
+
+      const icon = document.createElement('span');
+      icon.className = LOCKSCREEN_SWITCH_ACCOUNT_ICON_CLASS;
+      icon.setAttribute('aria-hidden', 'true');
+      switchAccountButton.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = LOCKSCREEN_SWITCH_ACCOUNT_LABEL_CLASS;
+      label.textContent = '\u5207\u6362\u7528\u6237';
+      switchAccountButton.appendChild(label);
+
+      loginForm.appendChild(switchAccountButton);
+    }
+
+    if (
+      switchAccountButton instanceof HTMLButtonElement &&
+      switchAccountButton.getAttribute(
+        LOCKSCREEN_DEFAULT_USERNAME_SWITCH_BOUND_ATTR
+      ) !== '1'
+    ) {
+      switchAccountButton.setAttribute(
+        LOCKSCREEN_DEFAULT_USERNAME_SWITCH_BOUND_ATTR,
+        '1'
+      );
+      switchAccountButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        loginInnerForm.setAttribute(LOCKSCREEN_MANUAL_ACCOUNT_MODE_ATTR, '1');
+        setLockscreenUsernameInputValue(usernameInput, '');
+        syncLockscreenDefaultUsername();
+        syncLockscreenTextAvatar();
+        usernameInput.focus();
+      });
+    }
+
+    hideLockscreenUsernameFieldContainer(usernameFieldContainer);
+    if (
+      usernameRow.parentElement !== usernameFieldContainer.parentElement ||
+      usernameRow.previousElementSibling !== usernameFieldContainer
+    ) {
+      usernameFieldContainer.insertAdjacentElement('afterend', usernameRow);
+    }
+  }
+
+  function updateLockscreenDefaultUsername(nextUsername) {
+    currentLockscreenDefaultUsername = normalizeLockscreenDefaultUsername(
+      nextUsername
+    );
+    const loginInnerForm = document.querySelector('.login-form form');
+    if (loginInnerForm instanceof HTMLElement) {
+      loginInnerForm.removeAttribute(LOCKSCREEN_MANUAL_ACCOUNT_MODE_ATTR);
+    }
+    syncLockscreenDefaultUsername();
+    syncLockscreenTextAvatar();
+  }
+
   function syncLockscreenTextAvatar() {
     const loginForm = document.querySelector('.login-form');
     if (!(loginForm instanceof HTMLElement)) return;
@@ -1439,6 +1651,7 @@
     if (isLockscreenView()) {
       injectStyle(LOCKSCREEN_STYLE_ID, 'lockscreen_mod.css');
       syncLoginWallpaperInlineStyle();
+      syncLockscreenDefaultUsername();
       syncLockscreenTextAvatar();
       return;
     }
@@ -1739,6 +1952,7 @@
     brandColor,
     fontSettings,
     customCodeSettings,
+    lockscreenDefaultUsername,
     launchpadIconScaleEnabled,
     launchpadIconScaleSelectedKeys,
     launchpadIconMaskOnlyKeys,
@@ -1762,6 +1976,7 @@
     updateBrandColor(brandColor);
     updateFontSettings(fontSettings || currentFontSettings);
     updateCustomCodeSettings(customCodeSettings || currentCustomCodeSettings);
+    updateLockscreenDefaultUsername(lockscreenDefaultUsername);
     updateLoginWallpaper();
     updateLockscreenStyleInjection();
     updateLaunchpadIconScaleEnabled(
@@ -1863,6 +2078,7 @@
           message.brandColor ?? currentBrandColor,
           message.fontSettings ?? currentFontSettings,
           message.customCodeSettings ?? currentCustomCodeSettings,
+          message.lockscreenDefaultUsername ?? currentLockscreenDefaultUsername,
           message.launchpadIconScaleEnabled ?? currentLaunchpadIconScaleEnabled,
           message.launchpadIconScaleSelectedKeys ??
             currentLaunchpadIconScaleSelectedKeys,
@@ -1939,7 +2155,8 @@
       fontFeatureSettings: FONT_DEFAULT_SETTINGS.featureSettings,
       fontFaceName: FONT_DEFAULT_SETTINGS.faceName,
       fontUrl: FONT_DEFAULT_SETTINGS.url,
-      customCodeEnabled: CUSTOM_CODE_DEFAULT_SETTINGS.enabled
+      customCodeEnabled: CUSTOM_CODE_DEFAULT_SETTINGS.enabled,
+      lockscreenDefaultUsername: ''
     },
     async ({
       enabledOrigins,
@@ -1964,7 +2181,8 @@
       fontFeatureSettings,
       fontFaceName,
       fontUrl,
-      customCodeEnabled
+      customCodeEnabled,
+      lockscreenDefaultUsername
     }) => {
       await Promise.all([fontAssetReady, loginWallpaperReady, customCodeReady]);
 
@@ -2009,6 +2227,7 @@
           brandColor,
           syncedFontSettings,
           syncedCustomCodeSettings,
+          lockscreenDefaultUsername,
           launchpadIconScaleEnabled,
           launchpadIconScaleSelectedKeys,
           launchpadIconMaskOnlyKeys,
@@ -2033,6 +2252,9 @@
         );
         currentFontSettings = syncedFontSettings;
         currentCustomCodeSettings = syncedCustomCodeSettings;
+        currentLockscreenDefaultUsername = normalizeLockscreenDefaultUsername(
+          lockscreenDefaultUsername
+        );
         currentLaunchpadIconScaleEnabled = Boolean(launchpadIconScaleEnabled);
         const normalizedRedrawMap = normalizeLaunchpadRedrawMap(
           launchpadIconRedrawMap
@@ -2211,6 +2433,18 @@
           currentCustomCodeSettings = normalizeCustomCodeSettings(nextCustomCodeSettings);
         } else {
           updateCustomCodeSettings(nextCustomCodeSettings);
+        }
+      }
+
+      if (changes.lockscreenDefaultUsername) {
+        if (!isInjectionActive) {
+          currentLockscreenDefaultUsername = normalizeLockscreenDefaultUsername(
+            changes.lockscreenDefaultUsername.newValue
+          );
+        } else {
+          updateLockscreenDefaultUsername(
+            changes.lockscreenDefaultUsername.newValue
+          );
         }
       }
 

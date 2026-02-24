@@ -54,6 +54,9 @@
     "clearLoginWallpaperFile"
   );
   const loginWallpaperStatusEl = document.getElementById("loginWallpaperStatus");
+  const lockscreenDefaultUsernameEl = document.getElementById(
+    "lockscreenDefaultUsername"
+  );
   const firstCardEl = document.querySelector(".card");
   const manifestVersion = chrome.runtime.getManifest().version;
   const externalLinkEls = document.querySelectorAll(
@@ -77,6 +80,7 @@
   const UPDATE_STATE_LOCAL_KEY = "updateCheckState";
   const CUSTOM_CSS_LOCAL_KEY = "customCssCode";
   const CUSTOM_JS_LOCAL_KEY = "customJsCode";
+  const LOCKSCREEN_DEFAULT_USERNAME_MAX = 80;
   const CUSTOM_CODE_STATUS_DEFAULT = "失焦后自动保存并应用到当前页面";
   const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
   const GITHUB_COMMITS_PAGE_URL =
@@ -133,6 +137,7 @@
   let uploadedFontFormat = "";
   let uploadedLoginWallpaperDataUrl = "";
   let uploadedLoginWallpaperFileName = "";
+  let lockscreenDefaultUsername = "";
   let updateCheckState = {
     baseVersion: manifestVersion,
     baseSha: "",
@@ -1236,6 +1241,10 @@
     };
   }
 
+  function normalizeLockscreenDefaultUsername(value) {
+    return normalizeText(value, LOCKSCREEN_DEFAULT_USERNAME_MAX);
+  }
+
   function inferFontFormat(fileName, mimeType) {
     const lower = `${fileName || ""} ${mimeType || ""}`.toLowerCase();
     if (lower.includes("woff2")) return "woff2";
@@ -1294,6 +1303,11 @@
       return;
     }
     loginWallpaperStatusEl.textContent = "未导入本地壁纸，使用 CSS 默认壁纸";
+  }
+
+  function setLockscreenDefaultUsernameUI(value) {
+    if (!lockscreenDefaultUsernameEl) return;
+    lockscreenDefaultUsernameEl.value = normalizeLockscreenDefaultUsername(value);
   }
 
   function setFontSettingsUI(next) {
@@ -1547,6 +1561,12 @@
     return syncOk && localSetResult.ok;
   }
 
+  async function saveLockscreenDefaultUsername(next) {
+    return safeSyncSet({
+      lockscreenDefaultUsername: normalizeLockscreenDefaultUsername(next)
+    });
+  }
+
   async function applyToCurrentTabIfNeeded(options = {}) {
     const shouldInject =
       siteToggleEl.checked || (autoSuspectedFnOSEl.checked && isFnOSWebUi);
@@ -1594,6 +1614,7 @@
         brandColor,
         fontSettings: getFontPayload(),
         customCodeSettings: getCustomCodePayload(),
+        lockscreenDefaultUsername,
         refreshFontAsset: Boolean(options.refreshFontAsset),
         refreshCustomCode: Boolean(options.refreshCustomCode),
         refreshLoginWallpaper: Boolean(options.refreshLoginWallpaper)
@@ -1687,6 +1708,15 @@
     });
   }
 
+  async function applyLockscreenDefaultUsername(next, persist) {
+    lockscreenDefaultUsername = normalizeLockscreenDefaultUsername(next);
+    setLockscreenDefaultUsernameUI(lockscreenDefaultUsername);
+    if (persist) {
+      await saveLockscreenDefaultUsername(lockscreenDefaultUsername);
+    }
+    await applyToCurrentTabIfNeeded();
+  }
+
   await initializeUpdateChecker();
 
   if (!pageUrl || !origin || !/^https?:$/.test(pageUrl.protocol)) {
@@ -1717,6 +1747,7 @@
     if (clearFontFileEl) clearFontFileEl.disabled = true;
     if (loginWallpaperFileEl) loginWallpaperFileEl.disabled = true;
     if (clearLoginWallpaperFileEl) clearLoginWallpaperFileEl.disabled = true;
+    if (lockscreenDefaultUsernameEl) lockscreenDefaultUsernameEl.disabled = true;
 
     setFnUICheckedStatus(false);
     updatePlatformOptionsVisibility();
@@ -1765,7 +1796,8 @@
     fontFeatureSettings: DEFAULT_FONT_SETTINGS.featureSettings,
     fontFaceName: DEFAULT_FONT_SETTINGS.faceName,
     fontUrl: DEFAULT_FONT_SETTINGS.url,
-    customCodeEnabled: DEFAULT_CUSTOM_CODE_SETTINGS.enabled
+    customCodeEnabled: DEFAULT_CUSTOM_CODE_SETTINGS.enabled,
+    lockscreenDefaultUsername: ""
   });
 
   const localState = await chrome.storage.local.get({
@@ -1806,6 +1838,12 @@
     css: localState[CUSTOM_CSS_LOCAL_KEY],
     js: localState[CUSTOM_JS_LOCAL_KEY]
   });
+  lockscreenDefaultUsername = normalizeLockscreenDefaultUsername(
+    state.lockscreenDefaultUsername
+  );
+  if (state.lockscreenDefaultUsername !== lockscreenDefaultUsername) {
+    await saveLockscreenDefaultUsername(lockscreenDefaultUsername);
+  }
 
   uploadedFontDataUrl =
     typeof localState[FONT_LOCAL_DATA_KEY] === "string"
@@ -1907,6 +1945,7 @@
   setFontSettingsUI(fontSettings);
   setCustomCodeSettingsUI(customCodeSettings);
   setLoginWallpaperStatus();
+  setLockscreenDefaultUsernameUI(lockscreenDefaultUsername);
 
   updatePlatformOptionsVisibility();
   updateBasePresetSettingsVisibility();
@@ -2084,6 +2123,26 @@
       if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
       event.preventDefault();
       await commitCustomCodeInputs(true);
+    });
+  }
+
+  if (lockscreenDefaultUsernameEl) {
+    const handleLockscreenDefaultUsernameCommit = async () => {
+      await applyLockscreenDefaultUsername(lockscreenDefaultUsernameEl.value, true);
+    };
+
+    lockscreenDefaultUsernameEl.addEventListener(
+      "change",
+      handleLockscreenDefaultUsernameCommit
+    );
+    lockscreenDefaultUsernameEl.addEventListener(
+      "blur",
+      handleLockscreenDefaultUsernameCommit
+    );
+    lockscreenDefaultUsernameEl.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      await handleLockscreenDefaultUsernameCommit();
     });
   }
 
