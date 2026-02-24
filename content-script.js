@@ -3,6 +3,7 @@
 
   const ORIGIN = location.origin;
   const BASIC_STYLE_ID = 'fnos-ui-mods-basic-style';
+  const LOCKSCREEN_STYLE_ID = 'fnos-ui-mods-lockscreen-style';
   const TITLEBAR_STYLE_ID = 'fnos-ui-mods-titlebar-style';
   const LAUNCHPAD_STYLE_ID = 'fnos-ui-mods-launchpad-style';
   const SCRIPT_ID = 'fnos-ui-mods-script';
@@ -29,6 +30,42 @@
   const FONT_LOCAL_DATA_KEY = 'customFontDataUrl';
   const FONT_LOCAL_NAME_KEY = 'customFontFileName';
   const FONT_LOCAL_FORMAT_KEY = 'customFontFormat';
+  const LOGIN_WALLPAPER_LOCAL_DATA_KEY = 'loginWallpaperDataUrl';
+  const LOGIN_WALLPAPER_LOCAL_NAME_KEY = 'loginWallpaperFileName';
+  const LOGIN_WALLPAPER_GRADIENT =
+    'linear-gradient(120deg, rgba(8, 14, 28, 0.35), rgba(8, 14, 28, 0.18))';
+  const LOCKSCREEN_TEXT_AVATAR_CLASS = 'fnos-lockscreen-text-avatar';
+  const LOCKSCREEN_TEXT_AVATAR_BOUND_ATTR = 'data-fnos-avatar-bound';
+  const LOCKSCREEN_PINYIN_BOUNDARIES = [
+    '\u963f',
+    '\u516b',
+    '\u5693',
+    '\u642d',
+    '\u86fe',
+    '\u53d1',
+    '\u65ee',
+    '\u54c8',
+    '\u51fb',
+    '\u5580',
+    '\u5783',
+    '\u5988',
+    '\u62ff',
+    '\u5662',
+    '\u556a',
+    '\u671f',
+    '\u7136',
+    '\u6492',
+    '\u584c',
+    '\u6316',
+    '\u6614',
+    '\u538b',
+    '\u531d'
+  ];
+  const LOCKSCREEN_PINYIN_INITIALS = 'ABCDEFGHJKLMNOPQRSTWXYZ';
+  const LOCKSCREEN_PINYIN_COLLATOR = new Intl.Collator(
+    'zh-Hans-u-co-pinyin',
+    { sensitivity: 'base', usage: 'sort' }
+  );
   const CUSTOM_CSS_LOCAL_KEY = 'customCssCode';
   const CUSTOM_JS_LOCAL_KEY = 'customJsCode';
   const FONT_DEFAULT_FACE_NAME = 'FnOSCustomFont';
@@ -101,9 +138,17 @@
   let currentUploadedFontDataUrl = '';
   let currentUploadedFontFileName = '';
   let currentUploadedFontFormat = '';
+  let currentLoginWallpaperDataUrl = '';
+  let currentLoginWallpaperFileName = '';
+  let currentLoginWallpaperResolvedDataUrl = '';
+  let currentLoginWallpaperObjectUrl = '';
   let currentLaunchpadAppItems = [];
   let launchpadIconObserver = null;
   let launchpadIconRefreshRafId = 0;
+  let lockscreenStyleObserver = null;
+  let lockscreenStyleRafId = 0;
+  let lockscreenStylePollTimer = 0;
+  let hasLockscreenLifecycleHooks = false;
   let lastAppliedCustomJs = '';
   let isInjectionActive = false;
   let extensionContextInvalidated = false;
@@ -907,6 +952,7 @@
     currentBrandColor = clampBrandLightness(normalized);
     if (!currentBasePresetEnabled) return;
     applyBrandPalette(currentBrandColor);
+    syncLockscreenTextAvatar();
   }
 
   function normalizeText(value, maxLength = 300) {
@@ -1028,6 +1074,116 @@
     return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
+  function inferLoginWallpaperMimeType(fileName) {
+    if (typeof fileName !== 'string') return '';
+    const lower = fileName.trim().toLowerCase();
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    return '';
+  }
+
+  function normalizeLoginWallpaperDataUrl(dataUrl, fileName) {
+    const normalizedDataUrl = typeof dataUrl === 'string' ? dataUrl.trim() : '';
+    if (!normalizedDataUrl) return '';
+
+    const headerMatch = normalizedDataUrl.match(/^data:([^;,]*)(;base64)?,/i);
+    if (!headerMatch) return normalizedDataUrl;
+
+    const rawMime = (headerMatch[1] || '').toLowerCase();
+    const base64Token = headerMatch[2] || '';
+    const payload = normalizedDataUrl.slice(headerMatch[0].length);
+
+    const aliasNormalizedMime =
+      rawMime === 'image/jpg' || rawMime === 'image/pjpeg'
+        ? 'image/jpeg'
+        : rawMime === 'image/x-png'
+          ? 'image/png'
+          : rawMime;
+
+    const inferredMime = inferLoginWallpaperMimeType(fileName);
+    const shouldUseInferredMime =
+      aliasNormalizedMime === '' ||
+      aliasNormalizedMime === 'application/octet-stream' ||
+      aliasNormalizedMime === 'application/x-octet-stream' ||
+      aliasNormalizedMime === 'binary/octet-stream';
+    const targetMime =
+      shouldUseInferredMime && inferredMime ? inferredMime : aliasNormalizedMime;
+
+    if (!targetMime || targetMime === rawMime) return normalizedDataUrl;
+    return `data:${targetMime}${base64Token},${payload}`;
+  }
+
+  function revokeLoginWallpaperObjectUrl() {
+    if (!currentLoginWallpaperObjectUrl) return;
+    try {
+      URL.revokeObjectURL(currentLoginWallpaperObjectUrl);
+    } catch (_error) {
+      // ignore revoke failures
+    }
+    currentLoginWallpaperObjectUrl = '';
+    currentLoginWallpaperResolvedDataUrl = '';
+  }
+
+  function decodeBase64ToUint8Array(base64Payload) {
+    const binary = atob(base64Payload);
+    const length = binary.length;
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const match = dataUrl.match(/^data:([^;,]*)(;base64)?,([\s\S]*)$/i);
+    if (!match) return null;
+
+    const mimeType = (match[1] || 'application/octet-stream').toLowerCase();
+    const base64Token = match[2] || '';
+    const payload = match[3] || '';
+
+    try {
+      if (base64Token) {
+        return new Blob([decodeBase64ToUint8Array(payload)], { type: mimeType });
+      }
+      return new Blob([decodeURIComponent(payload)], { type: mimeType });
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function resolveLoginWallpaperUrl(normalizedDataUrl) {
+    if (!normalizedDataUrl) return '';
+    if (
+      currentLoginWallpaperResolvedDataUrl === normalizedDataUrl &&
+      currentLoginWallpaperObjectUrl
+    ) {
+      return currentLoginWallpaperObjectUrl;
+    }
+
+    revokeLoginWallpaperObjectUrl();
+
+    if (!normalizedDataUrl.startsWith('data:')) {
+      return normalizedDataUrl;
+    }
+
+    const blob = dataUrlToBlob(normalizedDataUrl);
+    if (!(blob instanceof Blob)) {
+      return normalizedDataUrl;
+    }
+
+    try {
+      currentLoginWallpaperObjectUrl = URL.createObjectURL(blob);
+      currentLoginWallpaperResolvedDataUrl = normalizedDataUrl;
+      return currentLoginWallpaperObjectUrl;
+    } catch (_error) {
+      currentLoginWallpaperObjectUrl = '';
+      currentLoginWallpaperResolvedDataUrl = '';
+      return normalizedDataUrl;
+    }
+  }
+
   function inferFontFormat(source, fallback) {
     const lower = `${source || ''} ${fallback || ''}`.toLowerCase();
     if (lower.includes('woff2')) return 'woff2';
@@ -1114,6 +1270,219 @@
     }
   }
 
+  function isElementVisiblyRendered(element) {
+    if (!(element instanceof HTMLElement)) return false;
+    const computed = window.getComputedStyle(element);
+    return (
+      computed.display !== 'none' &&
+      computed.visibility !== 'hidden' &&
+      Number.parseFloat(computed.opacity || '1') > 0.01 &&
+      element.getClientRects().length > 0
+    );
+  }
+
+  function getLockscreenPinyinInitial(char) {
+    if (!/[\u3400-\u9fff]/.test(char)) return '';
+    for (let i = LOCKSCREEN_PINYIN_BOUNDARIES.length - 1; i >= 0; i -= 1) {
+      const boundary = LOCKSCREEN_PINYIN_BOUNDARIES[i];
+      if (LOCKSCREEN_PINYIN_COLLATOR.compare(char, boundary) >= 0) {
+        return LOCKSCREEN_PINYIN_INITIALS.charAt(i);
+      }
+    }
+    return LOCKSCREEN_PINYIN_INITIALS.charAt(0);
+  }
+
+  function getLockscreenAvatarInitial(value) {
+    if (typeof value !== 'string') return '?';
+    const trimmed = value.trim();
+    if (!trimmed) return '?';
+    const firstChar = Array.from(trimmed)[0] || '';
+    if (!firstChar) return '?';
+    if (/[A-Za-z]/.test(firstChar)) return firstChar.toUpperCase();
+    if (/[0-9]/.test(firstChar)) return firstChar;
+    const pinyinInitial = getLockscreenPinyinInitial(firstChar);
+    if (pinyinInitial) return pinyinInitial;
+    return firstChar.toUpperCase();
+  }
+
+  function resolveLockscreenAvatarSource(loginFormElement, formElement) {
+    const usernameInput = formElement.querySelector(
+      'input#username, input[name="username"]'
+    );
+    if (usernameInput instanceof HTMLInputElement) {
+      const inputValue = usernameInput.value.trim();
+      if (inputValue) return inputValue;
+    }
+
+    const usernameLabel =
+      loginFormElement.querySelector('p[title]') ||
+      loginFormElement.querySelector(
+        'p.text-\\[18px\\].min-h-\\[26px\\].leading-xl.text-center.mt-5.mb-\\[22px\\].select-none'
+      );
+    if (usernameLabel instanceof HTMLElement) {
+      const titleValue = usernameLabel.getAttribute('title');
+      if (typeof titleValue === 'string' && titleValue.trim()) {
+        return titleValue.trim();
+      }
+      if (typeof usernameLabel.textContent === 'string') {
+        const textValue = usernameLabel.textContent.trim();
+        if (textValue) return textValue;
+      }
+    }
+
+    return '';
+  }
+
+  function parseRgbTriplet(value) {
+    if (typeof value !== 'string') return null;
+    const match = value
+      .trim()
+      .match(/^(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})$/);
+    if (!match) return null;
+    return {
+      r: clamp255(Number.parseInt(match[1], 10)),
+      g: clamp255(Number.parseInt(match[2], 10)),
+      b: clamp255(Number.parseInt(match[3], 10))
+    };
+  }
+
+  function getLockscreenAvatarThemeRgb(sourceElement) {
+    if (sourceElement instanceof HTMLElement) {
+      const computed = window.getComputedStyle(sourceElement);
+      const fromCssVar = parseRgbTriplet(
+        computed.getPropertyValue('--semi-brand-4')
+      );
+      if (fromCssVar) return fromCssVar;
+    }
+
+    return (
+      hexToRgb(normalizeHex(currentBrandColor)) ||
+      hexToRgb(THEME_DEFAULT_BRAND) || {
+        r: 0,
+        g: 102,
+        b: 255
+      }
+    );
+  }
+
+  function getLockscreenAvatarTextColor({ r, g, b }) {
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness >= 168 ? '#101114' : '#FFFFFF';
+  }
+
+  function syncLockscreenAvatarTheme(avatarElement, sourceElement) {
+    if (!(avatarElement instanceof HTMLElement)) return;
+    const rgb = getLockscreenAvatarThemeRgb(sourceElement);
+    avatarElement.style.setProperty('--fnos-lockscreen-avatar-bg', formatRgb(rgb));
+    avatarElement.style.setProperty(
+      '--fnos-lockscreen-avatar-fg',
+      getLockscreenAvatarTextColor(rgb)
+    );
+  }
+
+  function syncLockscreenTextAvatar() {
+    const loginForm = document.querySelector('.login-form');
+    if (!(loginForm instanceof HTMLElement)) return;
+    const loginInnerForm = loginForm.querySelector('form');
+    if (!(loginInnerForm instanceof HTMLElement)) return;
+
+    let avatar = loginInnerForm.querySelector(`.${LOCKSCREEN_TEXT_AVATAR_CLASS}`);
+    if (!(avatar instanceof HTMLElement)) {
+      avatar = document.createElement('div');
+      avatar.className = LOCKSCREEN_TEXT_AVATAR_CLASS;
+      avatar.setAttribute('aria-hidden', 'true');
+      loginInnerForm.insertBefore(avatar, loginInnerForm.firstChild);
+    }
+
+    syncLockscreenAvatarTheme(avatar, loginForm);
+
+    const sourceText = resolveLockscreenAvatarSource(loginForm, loginInnerForm);
+    const nextInitial = getLockscreenAvatarInitial(sourceText);
+    if (avatar.textContent !== nextInitial) {
+      avatar.textContent = nextInitial;
+    }
+
+    const usernameInput = loginInnerForm.querySelector(
+      'input#username, input[name="username"]'
+    );
+    if (
+      usernameInput instanceof HTMLInputElement &&
+      usernameInput.getAttribute(LOCKSCREEN_TEXT_AVATAR_BOUND_ATTR) !== '1'
+    ) {
+      usernameInput.setAttribute(LOCKSCREEN_TEXT_AVATAR_BOUND_ATTR, '1');
+      usernameInput.addEventListener('input', syncLockscreenTextAvatar);
+      usernameInput.addEventListener('change', syncLockscreenTextAvatar);
+    }
+  }
+
+  function isLockscreenView() {
+    const loginForm = document.querySelector('.login-form');
+    if (!isElementVisiblyRendered(loginForm)) return false;
+
+    // Desktop shell may keep login nodes mounted after login; avoid injecting then.
+    if (
+      document.querySelector(
+        '.trim-ui__app-layout--window, .trim-os__app-layout--files-container'
+      ) instanceof HTMLElement
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function updateLockscreenStyleInjection() {
+    if (!isInjectionActive) {
+      removeElementById(LOCKSCREEN_STYLE_ID);
+      return;
+    }
+    if (isLockscreenView()) {
+      injectStyle(LOCKSCREEN_STYLE_ID, 'lockscreen_mod.css');
+      syncLoginWallpaperInlineStyle();
+      syncLockscreenTextAvatar();
+      return;
+    }
+    removeElementById(LOCKSCREEN_STYLE_ID);
+  }
+
+  function scheduleLockscreenStyleInjection() {
+    if (lockscreenStyleRafId) return;
+    lockscreenStyleRafId = window.requestAnimationFrame(() => {
+      lockscreenStyleRafId = 0;
+      updateLockscreenStyleInjection();
+    });
+  }
+
+  function startLockscreenStyleSync() {
+    if (!lockscreenStyleObserver && document.documentElement) {
+      lockscreenStyleObserver = new MutationObserver(() => {
+        scheduleLockscreenStyleInjection();
+      });
+      lockscreenStyleObserver.observe(document.documentElement, {
+        subtree: true,
+        childList: true
+      });
+    }
+
+    if (!lockscreenStylePollTimer) {
+      lockscreenStylePollTimer = window.setInterval(() => {
+        updateLockscreenStyleInjection();
+      }, 1200);
+    }
+
+    if (hasLockscreenLifecycleHooks) return;
+    hasLockscreenLifecycleHooks = true;
+
+    window.addEventListener('load', scheduleLockscreenStyleInjection);
+    window.addEventListener('pageshow', scheduleLockscreenStyleInjection);
+    window.addEventListener('popstate', scheduleLockscreenStyleInjection);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        scheduleLockscreenStyleInjection();
+      }
+    });
+  }
+
   function syncDesktopIconLayoutCss() {
     if (currentDesktopIconLayoutEnabled) {
       injectStyle(DESKTOP_ICON_MOD_STYLE_ID, 'desktop_icon_mod.css');
@@ -1165,6 +1534,52 @@
     lastAppliedCustomJs = js;
   }
 
+  function updateLoginWallpaper() {
+    const root = document.documentElement;
+    if (!(root instanceof HTMLElement)) return;
+    const normalizedWallpaperDataUrl = normalizeLoginWallpaperDataUrl(
+      currentLoginWallpaperDataUrl,
+      currentLoginWallpaperFileName
+    );
+    if (!normalizedWallpaperDataUrl) {
+      root.style.removeProperty('--fnos-login-wallpaper-url');
+      revokeLoginWallpaperObjectUrl();
+    } else {
+      currentLoginWallpaperDataUrl = normalizedWallpaperDataUrl;
+      const resolvedWallpaperUrl = resolveLoginWallpaperUrl(
+        normalizedWallpaperDataUrl
+      );
+      root.style.setProperty(
+        '--fnos-login-wallpaper-url',
+        `url("${escapeCssString(resolvedWallpaperUrl || normalizedWallpaperDataUrl)}")`
+      );
+    }
+    syncLoginWallpaperInlineStyle();
+  }
+
+  function syncLoginWallpaperInlineStyle() {
+    const loginForm = document.querySelector('.login-form');
+    if (!(loginForm instanceof HTMLElement)) return;
+
+    // fnOS may reset lockscreen inline styles, so keep wallpaper rule pinned here.
+    loginForm.style.setProperty(
+      'background-image',
+      `${LOGIN_WALLPAPER_GRADIENT}, var(--fnos-login-wallpaper-url)`,
+      'important'
+    );
+    loginForm.style.setProperty(
+      'background-position',
+      'var(--fnos-login-wallpaper-position)',
+      'important'
+    );
+    loginForm.style.setProperty(
+      'background-size',
+      'var(--fnos-login-wallpaper-size)',
+      'important'
+    );
+    loginForm.style.setProperty('background-repeat', 'no-repeat', 'important');
+  }
+
   async function loadFontAssetFromStorage() {
     try {
       const localState = await chrome.storage.local.get({
@@ -1188,6 +1603,26 @@
       currentUploadedFontDataUrl = '';
       currentUploadedFontFileName = '';
       currentUploadedFontFormat = '';
+    }
+  }
+
+  async function loadLoginWallpaperFromStorage() {
+    try {
+      const localState = await chrome.storage.local.get({
+        [LOGIN_WALLPAPER_LOCAL_DATA_KEY]: '',
+        [LOGIN_WALLPAPER_LOCAL_NAME_KEY]: ''
+      });
+      currentLoginWallpaperDataUrl =
+        typeof localState[LOGIN_WALLPAPER_LOCAL_DATA_KEY] === 'string'
+          ? localState[LOGIN_WALLPAPER_LOCAL_DATA_KEY]
+          : '';
+      currentLoginWallpaperFileName =
+        typeof localState[LOGIN_WALLPAPER_LOCAL_NAME_KEY] === 'string'
+          ? localState[LOGIN_WALLPAPER_LOCAL_NAME_KEY]
+          : '';
+    } catch (_error) {
+      currentLoginWallpaperDataUrl = '';
+      currentLoginWallpaperFileName = '';
     }
   }
 
@@ -1312,9 +1747,12 @@
     triggerReason = 'unknown'
   ) {
     isInjectionActive = true;
+    startLockscreenStyleSync();
     currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
     currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
     setBasePresetEnabled(basePresetEnabled);
+    // Inject page-context script as early as possible to reduce visual delay.
+    injectScript();
     setWindowAnimationBlurEnabled(windowAnimationBlurEnabled);
     updateDesktopIconLayout(
       desktopIconPerColumn,
@@ -1324,6 +1762,8 @@
     updateBrandColor(brandColor);
     updateFontSettings(fontSettings || currentFontSettings);
     updateCustomCodeSettings(customCodeSettings || currentCustomCodeSettings);
+    updateLoginWallpaper();
+    updateLockscreenStyleInjection();
     updateLaunchpadIconScaleEnabled(
       launchpadIconScaleEnabled,
       launchpadIconScaleSelectedKeys,
@@ -1331,7 +1771,6 @@
       launchpadIconRedrawKeys,
       launchpadIconRedrawMap
     );
-    injectScript();
     notifyInjectionTriggered(triggerReason);
   }
 
@@ -1404,6 +1843,9 @@
         if (message.refreshCustomCode) {
           await loadCustomCodeFromStorage();
         }
+        if (message.refreshLoginWallpaper) {
+          await loadLoginWallpaperFromStorage();
+        }
 
         startInject(
           message.basePresetEnabled ?? currentBasePresetEnabled,
@@ -1470,6 +1912,7 @@
   });
 
   const fontAssetReady = loadFontAssetFromStorage();
+  const loginWallpaperReady = loadLoginWallpaperFromStorage();
   const customCodeReady = loadCustomCodeFromStorage();
 
   chrome.storage.sync.get(
@@ -1523,10 +1966,14 @@
       fontUrl,
       customCodeEnabled
     }) => {
-      await Promise.all([fontAssetReady, customCodeReady]);
+      await Promise.all([fontAssetReady, loginWallpaperReady, customCodeReady]);
 
-      const isWhitelisted = Array.isArray(enabledOrigins) && enabledOrigins.includes(ORIGIN);
-      const matchesFnOSUi = await waitForFnOSSignature();
+      const isWhitelisted =
+        Array.isArray(enabledOrigins) && enabledOrigins.includes(ORIGIN);
+      // Whitelisted origins should not wait for signature probing.
+      const matchesFnOSUi = isWhitelisted
+        ? true
+        : await waitForFnOSSignature(1500);
       const autoEnabled = autoEnableSuspectedFnOS && matchesFnOSUi;
 
       const syncedFontSettings = normalizeFontSettings({
@@ -1839,6 +2286,18 @@
           ? changes[FONT_LOCAL_FORMAT_KEY].newValue
           : '';
     }
+    if (changes[LOGIN_WALLPAPER_LOCAL_DATA_KEY]) {
+      currentLoginWallpaperDataUrl =
+        typeof changes[LOGIN_WALLPAPER_LOCAL_DATA_KEY].newValue === 'string'
+          ? changes[LOGIN_WALLPAPER_LOCAL_DATA_KEY].newValue
+          : '';
+    }
+    if (changes[LOGIN_WALLPAPER_LOCAL_NAME_KEY]) {
+      currentLoginWallpaperFileName =
+        typeof changes[LOGIN_WALLPAPER_LOCAL_NAME_KEY].newValue === 'string'
+          ? changes[LOGIN_WALLPAPER_LOCAL_NAME_KEY].newValue
+          : '';
+    }
     if (changes[CUSTOM_CSS_LOCAL_KEY]) {
       currentCustomCodeSettings = normalizeCustomCodeSettings({
         enabled: currentCustomCodeSettings.enabled,
@@ -1862,9 +2321,20 @@
       if (!isInjectionActive) return;
       updateFontSettings(currentFontSettings);
     }
+    if (
+      changes[LOGIN_WALLPAPER_LOCAL_DATA_KEY] ||
+      changes[LOGIN_WALLPAPER_LOCAL_NAME_KEY]
+    ) {
+      if (!isInjectionActive) return;
+      updateLoginWallpaper();
+    }
     if (changes[CUSTOM_CSS_LOCAL_KEY] || changes[CUSTOM_JS_LOCAL_KEY]) {
       if (!isInjectionActive) return;
       updateCustomCodeSettings(currentCustomCodeSettings);
     }
+  });
+
+  window.addEventListener('unload', () => {
+    revokeLoginWallpaperObjectUrl();
   });
 })();

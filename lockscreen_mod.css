@@ -1,0 +1,177 @@
+:root {
+  --fnos-lockscreen-accent: #68e8ff;
+  --fnos-lockscreen-accent-soft: rgba(104, 232, 255, 0.42);
+  --fnos-lockscreen-line: rgba(222, 236, 89, 0.72);
+  --fnos-lockscreen-shade-top: rgba(3, 23, 70, 0.24);
+  --fnos-lockscreen-shade-mid: rgba(3, 23, 70, 0.54);
+  --fnos-lockscreen-shade-bottom: rgba(2, 15, 45, 0.78);
+}
+
+.login-form {
+  position: relative !important;
+  overflow: hidden !important;
+  background-position: center center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+}
+
+.login-form::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.login-form>* {
+  position: relative;
+  z-index: 1;
+}
+
+#fnos-login-clock {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  display: flex !important;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  position: fixed;
+  right: 12px;
+  top: 8px;
+}
+
+#fnos-login-clock .fnos-login-clock-time,
+p.text-\[18px\].min-h-\[26px\].leading-xl.text-center.mt-5.mb-\[22px\].select-none {
+  line-height: 0.95 !important;
+  letter-spacing: 0.03em !important;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  font-style: normal;
+}
+
+p.text-\[18px\].min-h-\[26px\].leading-xl.text-center.mt-5.mb-\[22px\].select-none {
+  position: absolute;
+  left: 38px;
+  top: 8px;
+  margin: 0;
+  min-height: unset;
+}
+
+p.text-\[18px\].min-h-\[26px\].leading-xl.text-center.mt-5.mb-\[22px\].select-none::before {
+  content: '登录至 ';
+  margin: 0;
+  min-height: unset;
+}
+
+img.w-\[60px\].sm\:w-auto[alt="logo"] {
+  height: 14px;
+  position: absolute;
+  left: 12px;
+  top: 7px;
+  opacity: 0.75;
+}
+
+.semi-form-field-password+.mt-\[10px\].flex.w-full.items-center.justify-between>.cursor-pointer.text-base.leading-\[22px\].text-white-80 {
+  right: 96px;
+  position: absolute;
+  top: 8px;
+  line-height: 0.95 !important;
+  letter-spacing: 0.03em !important;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  font-style: normal;
+}
+
+.login-form .gradient-border {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  height: 100vh;
+  width: 100vw;
+  outline: none;
+}
+
+.login-form .semi-input,
+.login-form .semi-input::placeholder {
+  mix-blend-mode: darken;
+  font-size: 14px;
+}
+
+.login-form .semi-checkbox-addon,
+.login-form .cursor-pointer {
+  color: rgba(234, 247, 255, 0.88) !important;
+}
+
+.login-form form.semi-form {
+  display: flex;
+  flex-direction: column;
+  max-width: 278px;
+}
+
+.login-form .fnos-lockscreen-text-avatar {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 640;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--fnos-lockscreen-avatar-fg, #ffffff);
+  letter-spacing: 0.01em;
+  background: rgb(var(--fnos-lockscreen-avatar-bg, var(--semi-brand-4, 0, 102, 255)));
+  user-select: none;
+  pointer-events: none;
+}
+
+.login-form .semi-button-primary:not(.semi-button-disabled),
+.login-form .semi-button-disabled {
+  visibility: hidden;
+}
+
+.gradient-border:before {
+  content: none !important;
+}
+
+.login-form .semi-input-wrapper {
+  border-color: transparent;
+  background: var(--semi-color-white-40);
+  backdrop-filter: blur(14px);
+  border-radius: 999px;
+  max-height: 36px;
+}
+
+.semi-form-field-password+.mt-\[10px\].flex.w-full.items-center.justify-between {
+  box-sizing: border-box;
+  padding: 2px 14px;
+  width: fit-content;
+  margin: 14px auto 0;
+}
+
+.semi-checkbox:hover .semi-checkbox-inner-display {
+  box-shadow: inset 0 0 0 1px #FFFFFF !important;
+}
+
+.semi-checkbox:hover .semi-checkbox-inner-checked .semi-checkbox-inner-display,
+.semi-checkbox-indeterminate .semi-checkbox-inner-display:hover,
+.semi-checkbox-checked .semi-checkbox-inner-display:hover {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.semi-checkbox-indeterminate .semi-checkbox-inner-display,
+.semi-checkbox-checked .semi-checkbox-inner-display {
+  background: rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25) !important;
+}
+
+.login-form .gradient-border:has(h4)>* {
+  max-width: 369px;
+}

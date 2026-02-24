@@ -1248,9 +1248,156 @@ function setupTaskbarItemAnimations() {
     document.addEventListener('DOMContentLoaded', startObserving, { once: true });
 }
 
+function setupLoginClock() {
+    if (window._fnosLoginClockInitialized) return;
+    window._fnosLoginClockInitialized = true;
+
+    const CLOCK_ROOT_ID = 'fnos-login-clock';
+    const CLOCK_STYLE_ID = 'fnos-login-clock-style';
+    const LOGIN_READY_CLASS = 'fnos-login-injected-ready';
+    const LEGACY_LOGIN_PENDING_CLASS = 'fnos-login-pending';
+    const LEGACY_LOGIN_READY_CLASS = 'fnos-login-ready';
+    let clockTimer = null;
+
+    function cleanupClockRuntimeStyles() {
+        const styleEl = document.getElementById(CLOCK_STYLE_ID);
+        if (styleEl) {
+            styleEl.remove();
+        }
+    }
+
+    function clearLegacyLoginGate() {
+        const html = document.documentElement;
+        if (!(html instanceof HTMLElement)) return;
+        html.classList.remove(LEGACY_LOGIN_PENDING_CLASS);
+        html.classList.remove(LEGACY_LOGIN_READY_CLASS);
+    }
+
+    function markLoginReady() {
+        const html = document.documentElement;
+        if (!(html instanceof HTMLElement)) return;
+        html.classList.add(LOGIN_READY_CLASS);
+    }
+
+    function ensureClockRoot() {
+        let root = document.getElementById(CLOCK_ROOT_ID);
+        if (root instanceof HTMLElement) return root;
+        root = document.createElement('div');
+        root.id = CLOCK_ROOT_ID;
+        root.setAttribute('aria-hidden', 'true');
+        root.innerHTML = `
+<div class="fnos-login-clock-time">--:--</div>
+<div class="fnos-login-clock-date">---</div>
+`;
+        document.body.appendChild(root);
+        return root;
+    }
+
+    function isLoginView() {
+        const loginForm = document.querySelector('.login-form');
+        if (!(loginForm instanceof HTMLElement)) return false;
+
+        const computed = window.getComputedStyle(loginForm);
+        const isVisible =
+            computed.display !== 'none' &&
+            computed.visibility !== 'hidden' &&
+            Number.parseFloat(computed.opacity || '1') > 0.01 &&
+            loginForm.getClientRects().length > 0;
+        if (!isVisible) return false;
+
+        // Logged-in desktop view may keep login DOM nodes mounted.
+        // If desktop markers exist, treat current page as non-login state.
+        if (
+            document.querySelector(
+                '.trim-ui__app-layout--window, .trim-os__app-layout--files-container'
+            ) instanceof HTMLElement
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function updateClockText() {
+        const root = document.getElementById(CLOCK_ROOT_ID);
+        if (!(root instanceof HTMLElement)) return;
+        const timeEl = root.querySelector('.fnos-login-clock-time');
+        const dateEl = root.querySelector('.fnos-login-clock-date');
+        if (!(timeEl instanceof HTMLElement) || !(dateEl instanceof HTMLElement)) return;
+
+        const now = new Date();
+        const timeText = now.toLocaleTimeString('zh-CN', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const weekLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const week = weekLabels[now.getDay()] || '';
+        timeEl.textContent = `${week} ${timeText}`;
+        dateEl.style.display = 'none';
+        dateEl.textContent = '';
+    }
+
+    function updateClockVisibility() {
+        const root = document.getElementById(CLOCK_ROOT_ID);
+        if (!(root instanceof HTMLElement)) return;
+        root.style.display = isLoginView() ? '' : 'none';
+    }
+
+    function tickClock() {
+        if (isLoginView()) {
+            updateClockText();
+        }
+        updateClockVisibility();
+    }
+
+    function startClockTimer() {
+        if (clockTimer) return;
+        tickClock();
+        // Keep visibility checks responsive after route/DOM changes.
+        clockTimer = window.setInterval(tickClock, 1000);
+    }
+
+    function warmupLoginClockVisibility() {
+        // Login shell and React view may mount slightly after script injection.
+        // Retry a few times early so the clock appears as soon as login form is ready.
+        [80, 220, 450, 900, 1600, 2600, 3800].forEach((delay) => {
+            window.setTimeout(() => {
+                tickClock();
+            }, delay);
+        });
+    }
+
+    function mountClock() {
+        if (!(document.body instanceof HTMLElement)) return;
+        clearLegacyLoginGate();
+        cleanupClockRuntimeStyles();
+        ensureClockRoot();
+        startClockTimer();
+        tickClock();
+        warmupLoginClockVisibility();
+        window.addEventListener('load', tickClock);
+        window.addEventListener('pageshow', tickClock);
+        window.addEventListener('popstate', tickClock);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) tickClock();
+        });
+        window.requestAnimationFrame(() => {
+            markLoginReady();
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', mountClock, { once: true });
+    } else {
+        mountClock();
+    }
+}
+
 
 // 初始化函数
 function initialize() {
+    setupLoginClock();
 	applyFigmaSquirclesFromConfig();
     setupAppWindowAnimations();
     setupTaskbarItemAnimations();
@@ -1261,6 +1408,7 @@ document.addEventListener("DOMContentLoaded", initialize);
 
 applyFigmaSquirclesFromConfig();
 if (document.readyState !== 'loading') {
+    setupLoginClock();
     setupAppWindowAnimations();
     setupTaskbarItemAnimations();
 }

@@ -49,6 +49,11 @@
   const fontFileEl = document.getElementById("fontFile");
   const clearFontFileEl = document.getElementById("clearFontFile");
   const fontFileStatusEl = document.getElementById("fontFileStatus");
+  const loginWallpaperFileEl = document.getElementById("loginWallpaperFile");
+  const clearLoginWallpaperFileEl = document.getElementById(
+    "clearLoginWallpaperFile"
+  );
+  const loginWallpaperStatusEl = document.getElementById("loginWallpaperStatus");
   const firstCardEl = document.querySelector(".card");
   const manifestVersion = chrome.runtime.getManifest().version;
   const externalLinkEls = document.querySelectorAll(
@@ -67,6 +72,8 @@
   const FONT_LOCAL_DATA_KEY = "customFontDataUrl";
   const FONT_LOCAL_NAME_KEY = "customFontFileName";
   const FONT_LOCAL_FORMAT_KEY = "customFontFormat";
+  const LOGIN_WALLPAPER_LOCAL_DATA_KEY = "loginWallpaperDataUrl";
+  const LOGIN_WALLPAPER_LOCAL_NAME_KEY = "loginWallpaperFileName";
   const UPDATE_STATE_LOCAL_KEY = "updateCheckState";
   const CUSTOM_CSS_LOCAL_KEY = "customCssCode";
   const CUSTOM_JS_LOCAL_KEY = "customJsCode";
@@ -124,6 +131,8 @@
   let uploadedFontDataUrl = "";
   let uploadedFontFileName = "";
   let uploadedFontFormat = "";
+  let uploadedLoginWallpaperDataUrl = "";
+  let uploadedLoginWallpaperFileName = "";
   let updateCheckState = {
     baseVersion: manifestVersion,
     baseSha: "",
@@ -1236,6 +1245,14 @@
     return "";
   }
 
+  function inferImageFormat(fileName, mimeType) {
+    const lower = `${fileName || ""} ${mimeType || ""}`.toLowerCase();
+    if (lower.includes("webp")) return "webp";
+    if (lower.includes("png")) return "png";
+    if (lower.includes("jpg") || lower.includes("jpeg")) return "jpg";
+    return "image";
+  }
+
   function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1263,6 +1280,20 @@
       return;
     }
     fontFileStatusEl.textContent = "未导入字体文件";
+  }
+
+  function setLoginWallpaperStatus(message = "") {
+    if (!loginWallpaperStatusEl) return;
+    if (message) {
+      loginWallpaperStatusEl.textContent = message;
+      return;
+    }
+    if (uploadedLoginWallpaperDataUrl && uploadedLoginWallpaperFileName) {
+      const format = inferImageFormat(uploadedLoginWallpaperFileName, "");
+      loginWallpaperStatusEl.textContent = `已导入: ${uploadedLoginWallpaperFileName} / ${format}`;
+      return;
+    }
+    loginWallpaperStatusEl.textContent = "未导入本地壁纸，使用 CSS 默认壁纸";
   }
 
   function setFontSettingsUI(next) {
@@ -1564,7 +1595,8 @@
         fontSettings: getFontPayload(),
         customCodeSettings: getCustomCodePayload(),
         refreshFontAsset: Boolean(options.refreshFontAsset),
-        refreshCustomCode: Boolean(options.refreshCustomCode)
+        refreshCustomCode: Boolean(options.refreshCustomCode),
+        refreshLoginWallpaper: Boolean(options.refreshLoginWallpaper)
       });
     } catch (_error) {
       // ignore; content script may be unavailable for non-http(s) pages
@@ -1683,6 +1715,8 @@
     if (customJsEl) customJsEl.disabled = true;
     if (fontFileEl) fontFileEl.disabled = true;
     if (clearFontFileEl) clearFontFileEl.disabled = true;
+    if (loginWallpaperFileEl) loginWallpaperFileEl.disabled = true;
+    if (clearLoginWallpaperFileEl) clearLoginWallpaperFileEl.disabled = true;
 
     setFnUICheckedStatus(false);
     updatePlatformOptionsVisibility();
@@ -1738,6 +1772,8 @@
     [FONT_LOCAL_DATA_KEY]: "",
     [FONT_LOCAL_NAME_KEY]: "",
     [FONT_LOCAL_FORMAT_KEY]: "",
+    [LOGIN_WALLPAPER_LOCAL_DATA_KEY]: "",
+    [LOGIN_WALLPAPER_LOCAL_NAME_KEY]: "",
     [CUSTOM_CSS_LOCAL_KEY]: "",
     [CUSTOM_JS_LOCAL_KEY]: ""
   });
@@ -1782,6 +1818,14 @@
   uploadedFontFormat =
     typeof localState[FONT_LOCAL_FORMAT_KEY] === "string"
       ? localState[FONT_LOCAL_FORMAT_KEY]
+      : "";
+  uploadedLoginWallpaperDataUrl =
+    typeof localState[LOGIN_WALLPAPER_LOCAL_DATA_KEY] === "string"
+      ? localState[LOGIN_WALLPAPER_LOCAL_DATA_KEY]
+      : "";
+  uploadedLoginWallpaperFileName =
+    typeof localState[LOGIN_WALLPAPER_LOCAL_NAME_KEY] === "string"
+      ? localState[LOGIN_WALLPAPER_LOCAL_NAME_KEY]
       : "";
 
   siteToggleEl.checked = enabledOrigins.includes(origin);
@@ -1862,6 +1906,7 @@
   setBrandColorUI(brandColor);
   setFontSettingsUI(fontSettings);
   setCustomCodeSettingsUI(customCodeSettings);
+  setLoginWallpaperStatus();
 
   updatePlatformOptionsVisibility();
   updateBasePresetSettingsVisibility();
@@ -2093,6 +2138,58 @@
       uploadedFontFormat = "";
       setFontFileStatus();
       await applyToCurrentTabIfNeeded({ refreshFontAsset: true });
+    });
+  }
+
+  if (loginWallpaperFileEl) {
+    loginWallpaperFileEl.addEventListener("change", async () => {
+      const file = loginWallpaperFileEl.files?.[0];
+      if (!file) return;
+      if (file.type && !file.type.startsWith("image/")) {
+        setLoginWallpaperStatus("壁纸导入失败：请选择图片文件");
+        loginWallpaperFileEl.value = "";
+        return;
+      }
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const localSetResult = await safeLocalSet({
+          [LOGIN_WALLPAPER_LOCAL_DATA_KEY]: dataUrl,
+          [LOGIN_WALLPAPER_LOCAL_NAME_KEY]: file.name
+        });
+        if (!localSetResult.ok) {
+          setLoginWallpaperStatus(
+            localSetResult.isQuota
+              ? "壁纸导入失败：存储空间不足，请选择更小的图片后重试"
+              : "壁纸导入失败：本地存储写入失败"
+          );
+          return;
+        }
+
+        uploadedLoginWallpaperDataUrl = dataUrl;
+        uploadedLoginWallpaperFileName = file.name;
+        setLoginWallpaperStatus();
+        await applyToCurrentTabIfNeeded({ refreshLoginWallpaper: true });
+      } catch (_error) {
+        setLoginWallpaperStatus("壁纸导入失败：文件读取失败");
+      } finally {
+        loginWallpaperFileEl.value = "";
+      }
+    });
+  }
+
+  if (clearLoginWallpaperFileEl) {
+    clearLoginWallpaperFileEl.addEventListener("click", async () => {
+      const ok = await safeLocalRemove([
+        LOGIN_WALLPAPER_LOCAL_DATA_KEY,
+        LOGIN_WALLPAPER_LOCAL_NAME_KEY
+      ]);
+      if (!ok) return;
+
+      uploadedLoginWallpaperDataUrl = "";
+      uploadedLoginWallpaperFileName = "";
+      setLoginWallpaperStatus();
+      await applyToCurrentTabIfNeeded({ refreshLoginWallpaper: true });
     });
   }
 

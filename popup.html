@@ -630,6 +630,7 @@
     }
 
     .font-settings,
+    .login-wallpaper-settings,
     .color-settings,
     .custom-code-settings,
     .desktop-icon-settings {
@@ -1171,6 +1172,24 @@
         </div>
         <p id="fontFileStatus" class="field-help">未导入字体文件</p>
       </div> -->
+      </div>
+    </div>
+
+    <div class="login-wallpaper-settings">
+      <div class="row" style="margin: 2px -4px; width: calc(100% + 4px);">
+        <div class="label">
+          登录页壁纸
+          <div class="sub">从本地选择图片并覆盖登录页背景</div>
+        </div>
+      </div>
+      <div class="field">
+        <p class="field-label">导入本地图片（png / jpg / webp）</p>
+        <div class="file-row">
+          <input id="loginWallpaperFile" class="field-input" type="file"
+            accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" />
+          <button id="clearLoginWallpaperFile" class="mini-button" type="button">恢复默认壁纸</button>
+        </div>
+        <p id="loginWallpaperStatus" class="field-help">未导入本地壁纸，使用 CSS 默认壁纸</p>
       </div>
     </div>
 

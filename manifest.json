@@ -44,6 +44,7 @@
     {
       "resources": [
         "basic_mod.css",
+        "lockscreen_mod.css",
         "desktop_icon_mod.css",
         "windows_titlebar_mod.css",
         "mac_titlebar_mod.css",
