@@ -8,3 +8,5 @@ ssh/mod.css
 /fpk/FnOS_UI_Mods/app/www/fonts
 /fpk/FnOS_UI_Mods/app/www/prefect_icon
 /login-static
+/popup-dist
+/node_modules

@@ -1,4 +1,4 @@
-(async () => {
+export async function initPopup() {
   const versionEl = document.querySelector("code.version");
   const originEl = document.getElementById("origin");
   const updatePanelEl = document.getElementById("updatePanel");
@@ -2253,4 +2253,4 @@
   }
 
   await refreshLaunchpadAppList();
-})();
+}
