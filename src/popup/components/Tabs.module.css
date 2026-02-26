@@ -1,0 +1,196 @@
+.tabsRoot {
+  --tabs-accent: #0066ff;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+}
+
+.tabList {
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.tabListFill {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  width: 100%;
+}
+
+.tabListAuto {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tabListAuto::-webkit-scrollbar {
+  display: none;
+}
+
+.tabListFill .tabButton {
+  width: 100%;
+}
+
+.tabListAuto .tabButton {
+  flex: 0 0 auto;
+}
+
+.tabButton {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  min-width: 0;
+  background: transparent;
+  color: inherit;
+  position: relative;
+  isolation: isolate;
+  transition:
+    background-color 0.18s ease-in-out,
+    border-color 0.18s ease-in-out,
+    color 0.18s ease-in-out;
+  overflow: visible;
+  height: 32px;
+}
+
+.tabButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tabButton:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--tabs-accent) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.tabButtonActive {
+  color: var(--tabs-accent);
+}
+
+.tabButtonContent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.tabListAuto .tabButtonContent {
+  width: auto;
+}
+
+.tabButtonBackground {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.18s ease-in-out;
+  overflow-x: visible;
+  height: 34px;
+}
+
+.tabButtonBackgroundInactive {
+  color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.tabButtonBackgroundActive {
+  color: color-mix(in srgb, var(--tabs-accent) 18%, transparent);
+}
+
+.tabButtonBackgroundHidden {
+  opacity: 0;
+}
+
+.tabButtonBgEdgeActive {
+  flex-shrink: 0;
+  display: block;
+  height: 100%;
+  position: relative;
+  left: -16px;
+  aspect-ratio: 26 / 30;
+}
+
+.tabButtonBgFill {
+  background: var(--card-bg);
+  flex-shrink: 0;
+  width: calc(100% - 24px);
+  left: -16px;
+  position: relative;
+}
+
+.tabButtonBgFillInactive {
+  background-color: color-mix(in srgb, var(--card-bg) 30%, transparent);
+  flex-shrink: 0;
+  width: 100%;
+  position: relative;
+  height: 29px;
+  border-radius: 5px;
+  opacity: 0;
+}
+
+@supports(corner-shape: superellipse(2)) {
+  .tabButtonBgFillInactive {
+    border-radius: 11px;
+    corner-shape: superellipse(2);
+  }
+}
+
+.tabButtonInactive:hover .tabButtonBgFillInactive {
+  opacity: 1;
+}
+
+
+.tabIcon {
+  flex-shrink: 0;
+}
+
+.tabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabAddon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.tabButtonInactive .tabAddon {
+  opacity: 0.75;
+}
+
+.tabPanel {
+  min-width: 0;
+}
+
+.tabPanel[hidden] {
+  display: none !important;
+}
+
+.tabPanelActive {
+  display: block;
+}

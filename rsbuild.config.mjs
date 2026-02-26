@@ -12,7 +12,6 @@ export default defineConfig({
     template: './src/popup/index.html'
   },
   output: {
-    assetPrefix: './',
     distPath: {
       root: 'popup-dist'
     },

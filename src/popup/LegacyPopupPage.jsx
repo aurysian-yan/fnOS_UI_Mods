@@ -1,10 +1,13 @@
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import React, { useEffect, useRef, useState } from 'react';
-import { Switch } from './components/Switch';
+import { Code, SlidersHorizontal } from '@phosphor-icons/react';
+import { Switch, Tabs } from './components';
 import { initPopup } from './legacy-popup';
 
 const TEMPLATE_PATH = './popup-template.html';
+const SETTINGS_TAB_STORAGE_KEY = 'popupSettingsActiveTab';
+const DEFAULT_SETTINGS_TAB_ID = 'general';
 
 function getExtraClassNames(element, baseClassName) {
   return Array.from(element.classList)
@@ -95,12 +98,87 @@ async function waitForElementIds(elementIds, timeoutMs = 2000) {
   throw new Error(`switch 挂载超时，缺少元素: ${missingAfterTimeout.join(', ')}`);
 }
 
+function resolveInitialSettingsTabId() {
+  try {
+    const stored = sessionStorage.getItem(SETTINGS_TAB_STORAGE_KEY);
+    return stored === 'advanced' ? 'advanced' : DEFAULT_SETTINGS_TAB_ID;
+  } catch (_error) {
+    return DEFAULT_SETTINGS_TAB_ID;
+  }
+}
+
+function applySettingsTabToPanels(hostElement, tabId, persist = true) {
+  const resolvedTabId = tabId === 'advanced' ? 'advanced' : 'general';
+  const generalPanel = hostElement.querySelector('#settingsTabPanelGeneral');
+  const advancedPanel = hostElement.querySelector('#settingsTabPanelAdvanced');
+  if (!generalPanel || !advancedPanel) return;
+
+  const activateGeneral = resolvedTabId === 'general';
+  generalPanel.hidden = !activateGeneral;
+  advancedPanel.hidden = activateGeneral;
+  generalPanel.classList.toggle('is-active', activateGeneral);
+  advancedPanel.classList.toggle('is-active', !activateGeneral);
+  generalPanel.setAttribute('aria-hidden', activateGeneral ? 'false' : 'true');
+  advancedPanel.setAttribute('aria-hidden', activateGeneral ? 'true' : 'false');
+
+  if (!persist) return;
+  try {
+    sessionStorage.setItem(SETTINGS_TAB_STORAGE_KEY, resolvedTabId);
+  } catch (_error) {
+    // ignore storage failures
+  }
+}
+
+function mountSettingsTabs(hostElement) {
+  const mountElement = hostElement.querySelector('#settingsTabsReactMount');
+  if (!mountElement) return null;
+
+  const initialTabId = resolveInitialSettingsTabId();
+  applySettingsTabToPanels(hostElement, initialTabId, false);
+
+  function SettingsTabsMount() {
+    const [activeTabId, setActiveTabId] = useState(initialTabId);
+
+    useEffect(() => {
+      applySettingsTabToPanels(hostElement, activeTabId, true);
+    }, [activeTabId]);
+
+    return (
+      <Tabs
+        renderPanels={false}
+        activeId={activeTabId}
+        onChange={setActiveTabId}
+        accentColor="var(--switch-on)"
+        items={[
+          {
+            id: 'general',
+            label: '常用',
+            icon: SlidersHorizontal
+          },
+          {
+            id: 'advanced',
+            label: '高级',
+            icon: Code
+          }
+        ]}
+      />
+    );
+  }
+
+  const root = createRoot(mountElement);
+  flushSync(() => {
+    root.render(<SettingsTabsMount />);
+  });
+  return root;
+}
+
 export function LegacyPopupPage() {
   const [template, setTemplate] = useState('');
   const [loadError, setLoadError] = useState('');
   const initializedRef = useRef(false);
   const templateHostRef = useRef(null);
   const switchRootsRef = useRef([]);
+  const settingsTabsRootRef = useRef(null);
 
   useEffect(() => {
     let canceled = false;
@@ -141,6 +219,7 @@ export function LegacyPopupPage() {
       try {
         const { roots, requiredIds } = replaceStaticSwitchesWithComponent(hostElement);
         switchRootsRef.current = roots;
+        settingsTabsRootRef.current = mountSettingsTabs(hostElement);
         await waitForElementIds(requiredIds);
         await initPopup();
       } catch (error) {
@@ -155,6 +234,8 @@ export function LegacyPopupPage() {
         root.unmount();
       }
       switchRootsRef.current = [];
+      settingsTabsRootRef.current?.unmount();
+      settingsTabsRootRef.current = null;
     },
     []
   );

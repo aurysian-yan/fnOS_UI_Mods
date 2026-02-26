@@ -6,10 +6,12 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "build": "node scripts/build.js",
-    "build:popup": "rsbuild build",
+    "build:popup": "rsbuild build --base /popup-dist/",
+    "build:popup:watch": "rsbuild build --watch --base /popup-dist/",
     "dev:popup": "rsbuild dev"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
