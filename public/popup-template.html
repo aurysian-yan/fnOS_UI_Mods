@@ -81,6 +81,19 @@
     </span>
   </div>
   <div class="card">
+    <div id="settingsTabList" class="settings-tabs" role="tablist" aria-label="设置分组">
+      <button id="settingsTabGeneral" class="settings-tab-button is-active" type="button" role="tab"
+        aria-selected="true" aria-controls="settingsTabPanelGeneral" tabindex="0" data-tab-trigger="general">
+        常用
+      </button>
+      <button id="settingsTabAdvanced" class="settings-tab-button" type="button" role="tab" aria-selected="false"
+        aria-controls="settingsTabPanelAdvanced" tabindex="-1" data-tab-trigger="advanced">
+        高级
+      </button>
+    </div>
+
+    <div id="settingsTabPanelGeneral" class="settings-tab-panel is-active" role="tabpanel"
+      aria-labelledby="settingsTabGeneral" data-tab-panel="general">
     <div class="row">
       <div class="label">为当前站点注入</div>
       <label class="switch">
@@ -245,7 +258,10 @@
       <p id="launchpadAppListStatus" class="field-help">应用列表：等待读取</p>
       <div id="launchpadAppList" class="launchpad-app-list">暂无数据</div>
     </div>
+    </div>
 
+    <div id="settingsTabPanelAdvanced" class="settings-tab-panel" role="tabpanel"
+      aria-labelledby="settingsTabAdvanced" data-tab-panel="advanced" hidden>
     <div class="font-settings">
       <div class="row" style="margin: 2px -4px; width: calc(100% + 4px);">
         <div class="label">
@@ -373,6 +389,7 @@
 
         <p id="customCodeStatus" class="field-help">失焦后自动保存并应用到当前页面</p>
       </div>
+    </div>
     </div>
 
     <div class="tip">

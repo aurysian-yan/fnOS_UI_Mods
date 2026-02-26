@@ -57,6 +57,13 @@ export async function initPopup() {
   const lockscreenDefaultUsernameEl = document.getElementById(
     "lockscreenDefaultUsername"
   );
+  const settingsTabListEl = document.getElementById("settingsTabList");
+  const settingsTabButtonEls = Array.from(
+    document.querySelectorAll("[data-tab-trigger]")
+  );
+  const settingsTabPanelEls = Array.from(
+    document.querySelectorAll("[data-tab-panel]")
+  );
   const firstCardEl = document.querySelector(".card");
   const manifestVersion = chrome.runtime.getManifest().version;
   const externalLinkEls = document.querySelectorAll(
@@ -88,6 +95,8 @@ export async function initPopup() {
   const GITHUB_COMMITS_API_URL =
     "https://api.github.com/repos/aurysian-yan/FnOS_UI_Mods/commits?per_page=1";
   const ACTION_BADGE_TEXT = "UP";
+  const SETTINGS_TAB_STORAGE_KEY = "popupSettingsActiveTab";
+  const DEFAULT_SETTINGS_TAB_ID = "general";
 
   const DEFAULT_FONT_SETTINGS = {
     enabled: false,
@@ -157,6 +166,114 @@ export async function initPopup() {
     return /kQuotaBytes|QUOTA_BYTES|quota exceeded/i.test(message);
   }
 
+  function initSettingsTabs() {
+    if (!settingsTabListEl) return;
+    if (!settingsTabButtonEls.length || !settingsTabPanelEls.length) return;
+
+    const panelById = new Map();
+    settingsTabPanelEls.forEach((panelEl) => {
+      const tabId = panelEl.dataset.tabPanel;
+      if (typeof tabId !== "string" || !tabId) return;
+      panelById.set(tabId, panelEl);
+    });
+
+    const buttonById = new Map();
+    settingsTabButtonEls.forEach((buttonEl) => {
+      const tabId = buttonEl.dataset.tabTrigger;
+      if (typeof tabId !== "string" || !tabId || !panelById.has(tabId)) return;
+      buttonById.set(tabId, buttonEl);
+    });
+
+    const orderedTabIds = settingsTabButtonEls
+      .map((buttonEl) => buttonEl.dataset.tabTrigger || "")
+      .filter((tabId, index, list) => {
+        return Boolean(tabId) && panelById.has(tabId) && list.indexOf(tabId) === index;
+      });
+    if (!orderedTabIds.length) return;
+
+    const resolveTabId = (rawTabId) => {
+      if (typeof rawTabId === "string" && orderedTabIds.includes(rawTabId)) {
+        return rawTabId;
+      }
+      if (orderedTabIds.includes(DEFAULT_SETTINGS_TAB_ID)) {
+        return DEFAULT_SETTINGS_TAB_ID;
+      }
+      return orderedTabIds[0];
+    };
+
+    const applyActiveTab = (
+      rawTabId,
+      { persist = true, focusButton = false } = {}
+    ) => {
+      const tabId = resolveTabId(rawTabId);
+      settingsTabListEl.dataset.activeTab = tabId;
+
+      buttonById.forEach((buttonEl, buttonTabId) => {
+        const isActive = buttonTabId === tabId;
+        buttonEl.setAttribute("aria-selected", isActive ? "true" : "false");
+        buttonEl.tabIndex = isActive ? 0 : -1;
+        buttonEl.classList.toggle("is-active", isActive);
+      });
+
+      panelById.forEach((panelEl, panelTabId) => {
+        const isActive = panelTabId === tabId;
+        panelEl.hidden = !isActive;
+        panelEl.setAttribute("aria-hidden", isActive ? "false" : "true");
+        panelEl.classList.toggle("is-active", isActive);
+      });
+
+      if (persist) {
+        try {
+          sessionStorage.setItem(SETTINGS_TAB_STORAGE_KEY, tabId);
+        } catch (_error) {
+          // ignore storage failures in restricted environments
+        }
+      }
+
+      if (focusButton) {
+        buttonById.get(tabId)?.focus();
+      }
+    };
+
+    settingsTabButtonEls.forEach((buttonEl) => {
+      const tabId = buttonEl.dataset.tabTrigger;
+      if (!tabId || !buttonById.has(tabId)) return;
+
+      buttonEl.addEventListener("click", () => {
+        applyActiveTab(tabId);
+      });
+
+      buttonEl.addEventListener("keydown", (event) => {
+        const currentIndex = orderedTabIds.indexOf(tabId);
+        if (currentIndex < 0) return;
+
+        let nextIndex = currentIndex;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+          nextIndex = (currentIndex + 1) % orderedTabIds.length;
+        } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+          nextIndex = (currentIndex - 1 + orderedTabIds.length) % orderedTabIds.length;
+        } else if (event.key === "Home") {
+          nextIndex = 0;
+        } else if (event.key === "End") {
+          nextIndex = orderedTabIds.length - 1;
+        } else {
+          return;
+        }
+
+        event.preventDefault();
+        applyActiveTab(orderedTabIds[nextIndex], { focusButton: true });
+      });
+    });
+
+    let initialTabId = DEFAULT_SETTINGS_TAB_ID;
+    try {
+      initialTabId = sessionStorage.getItem(SETTINGS_TAB_STORAGE_KEY) || initialTabId;
+    } catch (_error) {
+      // ignore storage failures in restricted environments
+    }
+    applyActiveTab(initialTabId, { persist: false });
+  }
+
   if (versionEl) {
     versionEl.textContent = `版本 ${manifestVersion}`;
   }
@@ -174,6 +291,8 @@ export async function initPopup() {
       }
     });
   }
+
+  initSettingsTabs();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const pageUrl = tab?.url ? new URL(tab.url) : null;

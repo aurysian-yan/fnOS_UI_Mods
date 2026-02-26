@@ -37,6 +37,7 @@ body {
   min-width: 372px;
   min-height: 522px;
   scrollbar-width: none;
+  overflow: hidden;
 }
 
 body {
@@ -46,16 +47,17 @@ body {
   color: var(--text);
   background: var(--card-bg);
   user-select: none;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  height: fit-content;
+  height: 522px;
+  box-sizing: border-box;
 }
 
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
+.popup-route-pane-content::-webkit-scrollbar,
 .launchpad-extra-settings::-webkit-scrollbar {
   display: none;
 }
@@ -231,6 +233,53 @@ body:has(.has-update) {
   color: var(--tip);
   margin-top: 2px;
   font-family: "SarasaMonoSC", monospace;
+}
+
+.settings-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  margin-bottom: 4px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--bg);
+  box-sizing: border-box;
+}
+
+.settings-tab-button {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  font-family: "SarasaMonoSC", monospace;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+.settings-tab-button.is-active,
+.settings-tab-button[aria-selected="true"] {
+  background: color-mix(in srgb, var(--switch-on) 18%, var(--card-bg));
+  color: var(--text);
+}
+
+.settings-tab-button:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--switch-on) 70%, var(--card-border));
+  outline-offset: 1px;
+}
+
+.settings-tab-panel {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-tab-panel[hidden] {
+  display: none !important;
 }
 
 .theme-controls {
@@ -769,6 +818,202 @@ span.badge svg {
   }
 }
 
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.popup-router-root {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.popup-route-pane {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.popup-route-pane.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.popup-route-pane-content {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.popup-route-pane.is-active .popup-route-pane-content {
+  view-transition-name: popup-route;
+}
+
+::view-transition-group(popup-route) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+::view-transition-old(popup-route),
+::view-transition-new(popup-route) {
+  mix-blend-mode: normal;
+  height: 100%;
+}
+
+:root[data-popup-route-direction="forward"]::view-transition-old(popup-route) {
+  animation: popup-view-old-forward 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+:root[data-popup-route-direction="forward"]::view-transition-new(popup-route) {
+  animation: popup-view-new-forward 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+:root[data-popup-route-direction="backward"]::view-transition-old(popup-route) {
+  animation: popup-view-old-backward 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+:root[data-popup-route-direction="backward"]::view-transition-new(popup-route) {
+  animation: popup-view-new-backward 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes popup-view-old-forward {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(-20px, 0, 0);
+    filter: blur(1.2px);
+  }
+}
+
+@keyframes popup-view-new-forward {
+  from {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+    filter: blur(1.2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+}
+
+@keyframes popup-view-old-backward {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(20px, 0, 0);
+    filter: blur(1.2px);
+  }
+}
+
+@keyframes popup-view-new-backward {
+  from {
+    opacity: 0;
+    transform: translate3d(-20px, 0, 0);
+    filter: blur(1.2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0px);
+  }
+}
+
+.popup-router-toggle {
+  position: fixed;
+  right: 12px;
+  bottom: 16px;
+  z-index: 10001;
+  border: 1px solid color-mix(in srgb, var(--card-border) 85%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1;
+  font-family: "SarasaMonoSC", monospace;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.popup-router-toggle:hover {
+  background: color-mix(in srgb, var(--switch-on) 18%, var(--card-bg));
+}
+
+.popup-router-toggle:active {
+  transform: scale(0.97);
+}
+
+body:has(.update-panel.has-update) .popup-router-toggle {
+  bottom: 92px;
+}
+
+.popup-about-header {
+  min-height: auto;
+  padding-top: 22px;
+}
+
+.popup-about-body {
+  min-height: auto;
+  gap: 10px;
+}
+
+.popup-about-kicker {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.popup-about-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.popup-about-subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.popup-about-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(popup-route),
+  ::view-transition-old(popup-route),
+  ::view-transition-new(popup-route),
+  .popup-router-toggle {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 .launchpad-app-item {
   display: flex;
   align-items: center;
@@ -861,6 +1106,7 @@ span.launchpad-app-text>span>span {
 @supports (corner-shape: superellipse(1.5)) {
 
   .platform-group,
+  .settings-tabs,
   .font-settings,
   .color-settings,
   .custom-code-settings,
@@ -873,6 +1119,11 @@ span.launchpad-app-text>span>span {
 
   .field-input {
     border-radius: 6px;
+    corner-shape: superellipse(1.5);
+  }
+
+  .settings-tab-button {
+    border-radius: 12px;
     corner-shape: superellipse(1.5);
   }
 }
