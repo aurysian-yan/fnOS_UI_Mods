@@ -2,6 +2,11 @@
   if (window.top !== window) return;
 
   const ORIGIN = location.origin;
+  const WEB_VERSION_ALLOWED_ORIGINS = new Set([
+    'https://fn.mods.aurysian.top'
+  ]);
+  const WEB_VERSION_REQUEST_TYPE = 'FNOS_UI_MODS_REQUEST_VERSION';
+  const WEB_VERSION_RESPONSE_TYPE = 'FNOS_UI_MODS_VERSION_RESPONSE';
   const BASIC_STYLE_ID = 'fnos-ui-mods-basic-style';
   const LOCKSCREEN_STYLE_ID = 'fnos-ui-mods-lockscreen-style';
   const TITLEBAR_STYLE_ID = 'fnos-ui-mods-titlebar-style';
@@ -211,6 +216,41 @@
       markContextInvalidated(error);
       return '';
     }
+  }
+
+  function getManifestVersion() {
+    if (extensionContextInvalidated) return '';
+    try {
+      return String(chrome.runtime.getManifest()?.version || '');
+    } catch (error) {
+      markContextInvalidated(error);
+      return '';
+    }
+  }
+
+  function handleWebsiteVersionRequest(event) {
+    if (!WEB_VERSION_ALLOWED_ORIGINS.has(ORIGIN)) return;
+    if (event.source !== window) return;
+    if (event.origin !== ORIGIN) return;
+
+    const payload =
+      event.data && typeof event.data === 'object' && !Array.isArray(event.data)
+        ? event.data
+        : null;
+    if (!payload || payload.type !== WEB_VERSION_REQUEST_TYPE) return;
+
+    const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
+    const version = getManifestVersion();
+    if (!version) return;
+
+    window.postMessage(
+      {
+        type: WEB_VERSION_RESPONSE_TYPE,
+        requestId,
+        version
+      },
+      ORIGIN
+    );
   }
 
   function ensureLaunchpadIconScaleStyle() {
@@ -2048,6 +2088,8 @@
       setTimeout(onTimeout, timeoutMs);
     });
   }
+
+  window.addEventListener('message', handleWebsiteVersionRequest);
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'FNOS_APPLY') {
