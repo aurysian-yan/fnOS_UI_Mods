@@ -3,6 +3,12 @@ import { flushSync } from 'react-dom';
 import React, { useEffect, useRef, useState } from 'react';
 import { Code, SlidersHorizontal } from '@phosphor-icons/react';
 import { Switch, Tabs } from './components';
+import {
+  ChakraBrandColorPicker,
+  ChakraNativeRadioGroup,
+  ChakraNativeSelect,
+  LaunchpadPerfectIconDrawer
+} from './components/ChakraSettingsControls';
 import { initPopup } from './legacy-popup';
 
 const TEMPLATE_PATH = './popup-template.html';
@@ -46,6 +52,131 @@ function resolveSwitchVariant(sliderElement) {
     '#mask1, #mask2, .switch-mask-left, .switch-mask-right'
   );
   return hasMask ? 'masked' : 'default';
+}
+
+function ensureChakraNativeHiddenHost(hostElement) {
+  let hiddenHost = hostElement.querySelector('.chakra-native-hidden-host');
+  if (hiddenHost) return hiddenHost;
+
+  hiddenHost = document.createElement('div');
+  hiddenHost.className = 'chakra-native-hidden-host';
+  hostElement.appendChild(hiddenHost);
+  return hiddenHost;
+}
+
+function buildRadioGroupOptions(groupElement) {
+  const optionElements = Array.from(groupElement.querySelectorAll('.platform-option'));
+  const options = [];
+
+  for (const optionElement of optionElements) {
+    const inputElement = optionElement.querySelector('input[type="radio"]');
+    if (!(inputElement instanceof HTMLInputElement)) continue;
+
+    options.push({
+      id: inputElement.id,
+      value: inputElement.value,
+      title: optionElement.querySelector('.platform-title')?.textContent?.trim() || inputElement.value,
+      description: optionElement.querySelector('.platform-desc')?.textContent?.trim() || '',
+      inputElement
+    });
+  }
+
+  return options;
+}
+
+function replaceStaticControlsWithChakra(hostElement) {
+  const roots = [];
+  const nativeHiddenHost = ensureChakraNativeHiddenHost(hostElement);
+
+  const brandColorInput = hostElement.querySelector('#brandColor');
+  if (brandColorInput instanceof HTMLInputElement) {
+    const themeControlsElement = brandColorInput.closest('.theme-controls');
+    const mountElement = document.createElement('div');
+    mountElement.className = 'chakra-color-picker-mount';
+
+    if (themeControlsElement?.parentElement) {
+      themeControlsElement.parentElement.replaceChild(mountElement, themeControlsElement);
+    } else {
+      brandColorInput.parentElement?.appendChild(mountElement);
+    }
+
+    brandColorInput.classList.add('chakra-native-hidden');
+    nativeHiddenHost.appendChild(brandColorInput);
+
+    const root = createRoot(mountElement);
+    flushSync(() => {
+      root.render(<ChakraBrandColorPicker nativeInput={brandColorInput} />);
+    });
+    roots.push(root);
+  }
+
+  function mountRadioGroup(groupSelector) {
+    const groupElement = hostElement.querySelector(groupSelector);
+    if (!(groupElement instanceof HTMLElement)) return;
+
+    const options = buildRadioGroupOptions(groupElement);
+    if (options.length === 0) return;
+
+    for (const option of options) {
+      option.inputElement.classList.add('chakra-native-hidden');
+      nativeHiddenHost.appendChild(option.inputElement);
+    }
+
+    groupElement.textContent = '';
+    const mountElement = document.createElement('div');
+    mountElement.className = 'chakra-radio-group-mount';
+    groupElement.appendChild(mountElement);
+
+    const root = createRoot(mountElement);
+    flushSync(() => {
+      root.render(<ChakraNativeRadioGroup options={options} />);
+    });
+    roots.push(root);
+  }
+
+  mountRadioGroup('#platformGroup');
+  mountRadioGroup('#launchpadGroup');
+
+  const desktopIconLayoutModeSelect = hostElement.querySelector('#desktopIconLayoutMode');
+  if (desktopIconLayoutModeSelect instanceof HTMLSelectElement) {
+    const selectOptions = Array.from(desktopIconLayoutModeSelect.options).map((option) => ({
+      value: option.value,
+      label: option.textContent?.trim() || option.value
+    }));
+
+    const mountElement = document.createElement('div');
+    mountElement.className = 'chakra-select-mount';
+    desktopIconLayoutModeSelect.parentElement?.replaceChild(mountElement, desktopIconLayoutModeSelect);
+
+    desktopIconLayoutModeSelect.classList.add('chakra-native-hidden');
+    nativeHiddenHost.appendChild(desktopIconLayoutModeSelect);
+
+    const root = createRoot(mountElement);
+    flushSync(() => {
+      root.render(
+        <ChakraNativeSelect
+          nativeSelect={desktopIconLayoutModeSelect}
+          options={selectOptions}
+        />
+      );
+    });
+    roots.push(root);
+  }
+
+  const launchpadSettingsElement = hostElement.querySelector('.launchpad-extra-settings');
+  if (launchpadSettingsElement instanceof HTMLElement && launchpadSettingsElement.parentElement) {
+    const mountElement = document.createElement('div');
+    mountElement.className = 'launchpad-drawer-mount';
+    launchpadSettingsElement.parentElement.replaceChild(mountElement, launchpadSettingsElement);
+
+    const root = createRoot(mountElement);
+    flushSync(() => {
+      root.render(<LaunchpadPerfectIconDrawer settingsSection={launchpadSettingsElement} />);
+    });
+    roots.push(root);
+  }
+
+  return roots;
 }
 
 function replaceStaticSwitchesWithComponent(hostElement) {
@@ -177,6 +308,7 @@ export function LegacyPopupPage() {
   const [loadError, setLoadError] = useState('');
   const initializedRef = useRef(false);
   const templateHostRef = useRef(null);
+  const chakraRootsRef = useRef([]);
   const switchRootsRef = useRef([]);
   const settingsTabsRootRef = useRef(null);
 
@@ -217,6 +349,7 @@ export function LegacyPopupPage() {
 
     void (async () => {
       try {
+        chakraRootsRef.current = replaceStaticControlsWithChakra(hostElement);
         const { roots, requiredIds } = replaceStaticSwitchesWithComponent(hostElement);
         switchRootsRef.current = roots;
         settingsTabsRootRef.current = mountSettingsTabs(hostElement);
@@ -230,6 +363,10 @@ export function LegacyPopupPage() {
 
   useEffect(
     () => () => {
+      for (const root of chakraRootsRef.current) {
+        root.unmount();
+      }
+      chakraRootsRef.current = [];
       for (const root of switchRootsRef.current) {
         root.unmount();
       }

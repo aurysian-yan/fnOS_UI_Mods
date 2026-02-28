@@ -11,7 +11,11 @@
     "dev:popup": "rsbuild dev"
   },
   "dependencies": {
+    "@chakra-ui/react": "2.10.9",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@phosphor-icons/react": "^2.1.10",
+    "framer-motion": "^12.34.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

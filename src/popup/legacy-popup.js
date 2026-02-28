@@ -179,6 +179,11 @@ export async function initPopup() {
   const pageUrl = tab?.url ? new URL(tab.url) : null;
   const origin = pageUrl?.origin;
   let isFnOSWebUi = false;
+  const CHAKRA_SYNC_EVENT = "popup:chakra-sync";
+
+  function notifyChakraControlSync() {
+    document.dispatchEvent(new CustomEvent(CHAKRA_SYNC_EVENT));
+  }
 
   function updatePlatformOptionsVisibility() {
     const hasAnyInjectionOptionOn =
@@ -187,6 +192,7 @@ export async function initPopup() {
     const display = hasAnyInjectionOptionOn && basePresetEnabled ? "block" : "none";
     platformGroupEl.style.display = display;
     launchpadGroupEl.style.display = display;
+    notifyChakraControlSync();
   }
 
   function updateBasePresetSettingsVisibility() {
@@ -208,6 +214,7 @@ export async function initPopup() {
     desktopIconPerColumnEl.disabled =
       !desktopIconLayoutEnabled ||
       normalizeDesktopIconLayoutMode(desktopIconLayoutModeEl.value) !== "fixed";
+    notifyChakraControlSync();
   }
 
   function updateFontSettingsVisibility() {
@@ -968,6 +975,7 @@ export async function initPopup() {
       brandColorTextEl.value = next;
     }
     syncSwitchAccent(next);
+    notifyChakraControlSync();
   }
 
   function normalizeDesktopIconPerColumn(value) {
@@ -994,6 +1002,7 @@ export async function initPopup() {
   function setDesktopIconPerColumnUI(value) {
     if (!desktopIconPerColumnEl) return;
     desktopIconPerColumnEl.value = String(normalizeDesktopIconPerColumn(value));
+    notifyChakraControlSync();
   }
 
   function normalizeText(value, maxLength = 300) {

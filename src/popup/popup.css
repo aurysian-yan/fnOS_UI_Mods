@@ -365,6 +365,32 @@ body:has(.has-update) {
   border-radius: 4px;
 }
 
+.chakra-native-hidden-host {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chakra-native-hidden {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.chakra-color-picker-mount {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chakra-radio-group-mount,
+.chakra-select-mount {
+  width: 100%;
+}
+
 .switch {
   box-sizing: border-box;
   display: inline-flex;
@@ -805,6 +831,46 @@ span.badge svg {
   box-sizing: border-box;
   background: var(--bg);
   max-height: 648px;
+}
+
+.launchpad-drawer-mount {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.launchpad-drawer-entry {
+  width: 100%;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 8px;
+  box-sizing: border-box;
+  background: var(--bg);
+}
+
+.launchpad-drawer-row {
+  margin: 0;
+}
+
+.launchpad-drawer-button {
+  min-width: 56px;
+}
+
+.launchpad-drawer-hidden-host {
+  display: none;
+}
+
+.launchpad-extra-settings.launchpad-extra-settings-in-drawer {
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  max-height: none;
+}
+
+.launchpad-extra-settings.launchpad-extra-settings-in-drawer .launchpad-app-list {
+  height: auto;
+  max-height: 60vh;
 }
 
 .launchpad-extra-settings .label {
