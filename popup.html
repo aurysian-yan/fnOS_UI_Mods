@@ -26,6 +26,9 @@
       --tip: #888;
       --switch-off: #858585;
       --switch-on: rgb(0, 102, 255);
+      --popup-font-family: "SarasaUISC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --popup-font-monospace-base: "SarasaMonoSC", monospace;
+      --popup-font-monospace-family: var(--popup-font-monospace-base), var(--popup-font-family);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -49,7 +52,7 @@
 
     body {
       margin: 0;
-      font-family: "SarasaUISC", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--popup-font-family);
       padding: 0;
       color: var(--text);
       background: var(--card-bg);
@@ -190,7 +193,7 @@
     .update-status {
       margin: 0;
       font-size: 13px;
-      font-family: "SarasaUISC", monospace;
+      font-family: var(--popup-font-monospace-family);
       line-height: 16px;
       word-break: break-word;
       color: #ff6633;
@@ -201,7 +204,7 @@
       min-width: 58px;
       padding: 6px 10px;
       flex-shrink: 0;
-      font-family: "SarasaMonoSC", monospace;
+      font-family: var(--popup-font-monospace-family);
     }
 
     .update-link {
@@ -209,7 +212,7 @@
       margin: 0;
       color: var(--text);
       text-decoration: none;
-      font-family: "SarasaUISC", monospace;
+      font-family: var(--popup-font-monospace-family);
       font-size: 12px;
       line-height: 1.35;
       word-break: break-word;
@@ -238,7 +241,7 @@
       font-size: 12px;
       color: var(--tip);
       margin-top: 2px;
-      font-family: "SarasaMonoSC", monospace;
+      font-family: var(--popup-font-monospace-family);
     }
 
     .theme-controls {
@@ -466,7 +469,7 @@
     code {
       color: var(--muted);
       font-size: 13px !important;
-      font-family: "SarasaMonoSC", monospace;
+      font-family: var(--popup-font-monospace-family);
     }
 
     span.badge {
@@ -665,7 +668,7 @@
       color: var(--text);
       font-size: 13px;
       padding: 8px 10px;
-      font-family: "SarasaUISC", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--popup-font-family);
       outline: none;
       margin: 2px -2px -2px -2px;
     }
@@ -677,7 +680,7 @@
     .code-input {
       min-height: 96px;
       resize: vertical;
-      font-family: "SarasaMonoSC", monospace;
+      font-family: var(--popup-font-monospace-family);
       line-height: 1.4;
     }
 
@@ -706,7 +709,7 @@
     .field-help {
       font-size: 12px;
       color: var(--tip);
-      font-family: "SarasaMonoSC", monospace;
+      font-family: var(--popup-font-monospace-family);
       word-break: break-all;
       margin: 4px;
     }
@@ -736,7 +739,7 @@
       overflow-y: auto;
       font-size: 12px;
       line-height: 1.45;
-      font-family: "SarasaMonoSC", monospace;
+      font-family: var(--popup-font-monospace-family);
       white-space: pre-wrap;
       word-break: break-all;
       box-sizing: border-box;
@@ -786,12 +789,12 @@
       flex-direction: column;
       min-width: 0;
       gap: 2px;
-      font-family: "SarasaUISC", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--popup-font-family);
     }
 
     span.launchpad-app-text>span>span {
       font-size: 12px;
-      font-family: "SarasaUISC", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--popup-font-family);
       line-height: 15px;
     }
 
@@ -1121,7 +1124,7 @@
       <div class="row" style="margin: 2px -4px; width: calc(100% + 4px);">
         <div class="label">
           字体替换
-          <div class="sub">替换 UI 字体并修改字重及 OpenType 属性</div>
+          <div class="sub">替换 UI 字体，并可单独设置等宽字体、字重和 OpenType 属性</div>
         </div>
         <label class="switch">
           <input id="fontOverrideEnabled" type="checkbox" />
@@ -1146,6 +1149,12 @@
           <p class="field-label">本地字体名称</p>
           <input id="fontFamily" class="field-input" type="text"
             placeholder='例如: "MiSans VF", "Segoe UI", sans-serif' />
+        </div>
+
+        <div class="field">
+          <p class="field-label">等宽字体名称</p>
+          <input id="fontMonospaceFamily" class="field-input" type="text"
+            placeholder='例如: "Maple Mono", "Cascadia Mono", monospace' />
         </div>
 
         <div class="field">

@@ -95,6 +95,7 @@
   const FONT_DEFAULT_SETTINGS = {
     enabled: false,
     family: '',
+    monospaceFamily: '',
     weight: '',
     featureSettings: '',
     faceName: FONT_DEFAULT_FACE_NAME,
@@ -1109,6 +1110,7 @@
     return {
       enabled: Boolean(raw?.enabled),
       family: normalizeText(raw?.family, 400),
+      monospaceFamily: normalizeText(raw?.monospaceFamily, 400),
       weight: normalizeFontWeight(raw?.weight),
       featureSettings: normalizeText(raw?.featureSettings, 200),
       faceName: normalizeFontFaceName(raw?.faceName),
@@ -1290,28 +1292,79 @@
       familyParts.push(settings.family);
     }
 
-    if (!familyParts.length) return fontBlocks.join('\n\n');
+    const ruleBlocks = [];
+    const hasBaseFamily = familyParts.length > 0;
 
-    const declarations = [`  font-family: ${familyParts.join(', ')} !important;`];
-    if (settings.weight) {
-      declarations.push(`  font-weight: ${settings.weight} !important;`);
+    if (hasBaseFamily || settings.monospaceFamily) {
+      const variableDeclarations = [];
+
+      if (hasBaseFamily) {
+        variableDeclarations.push(`  --fnos-font-family: ${familyParts.join(', ')};`);
+      }
+
+      if (settings.weight) {
+        variableDeclarations.push(`  --fnos-font-weight: ${settings.weight};`);
+      }
+
+      if (settings.monospaceFamily) {
+        variableDeclarations.push(
+          `  --fnos-font-monospace-family: ${settings.monospaceFamily}${
+            hasBaseFamily ? ', var(--fnos-font-family)' : ''
+          };`
+        );
+      } else if (hasBaseFamily) {
+        variableDeclarations.push(
+          '  --fnos-font-monospace-family: var(--fnos-font-family);'
+        );
+      }
+
+      ruleBlocks.push(`:root {\n${variableDeclarations.join('\n')}\n}`);
     }
-    if (settings.featureSettings) {
-      declarations.push(
-        `  font-feature-settings: ${settings.featureSettings} !important;`
+
+    if (hasBaseFamily) {
+      const declarations = ['  font-family: var(--fnos-font-family) !important;'];
+      if (settings.weight) {
+        declarations.push('  font-weight: var(--fnos-font-weight) !important;');
+      }
+      if (settings.featureSettings) {
+        declarations.push(
+          `  font-feature-settings: ${settings.featureSettings} !important;`
+        );
+      }
+
+      const selectors = [
+        ':root',
+        'body',
+        '#root',
+        '.semi-theme'
+      ].join(', ');
+
+      ruleBlocks.push(`${selectors} {\n${declarations.join('\n')}\n}`);
+    }
+
+    if (hasBaseFamily || settings.monospaceFamily) {
+      const monospaceSelectors = [
+        'code',
+        'pre',
+        'kbd',
+        'samp',
+        'textarea',
+        '.monaco-editor',
+        '.monaco-editor *',
+        '.cm-editor',
+        '.cm-editor *'
+      ].join(', ');
+
+      ruleBlocks.push(
+        `${monospaceSelectors} {\n` +
+          '  font-family: var(--fnos-font-monospace-family) !important;\n' +
+          '}'
       );
     }
 
-    const selectors = [
-      ':root',
-      'body',
-      '#root',
-      '#root *',
-      '.semi-theme',
-      '.semi-theme *'
-    ].join(', ');
+    if (!ruleBlocks.length) return fontBlocks.join('\n\n');
 
-    const ruleBlock = `${selectors} {\n${declarations.join('\n')}\n}`;
+    const ruleBlock = ruleBlocks.join('\n\n');
     if (!fontBlocks.length) return ruleBlock;
     return `${fontBlocks.join('\n\n')}\n\n${ruleBlock}`;
   }
@@ -2193,6 +2246,7 @@
       brandColor: THEME_DEFAULT_BRAND,
       fontOverrideEnabled: FONT_DEFAULT_SETTINGS.enabled,
       fontFamily: FONT_DEFAULT_SETTINGS.family,
+      fontMonospaceFamily: FONT_DEFAULT_SETTINGS.monospaceFamily,
       fontWeight: FONT_DEFAULT_SETTINGS.weight,
       fontFeatureSettings: FONT_DEFAULT_SETTINGS.featureSettings,
       fontFaceName: FONT_DEFAULT_SETTINGS.faceName,
@@ -2219,6 +2273,7 @@
       brandColor,
       fontOverrideEnabled,
       fontFamily,
+      fontMonospaceFamily,
       fontWeight,
       fontFeatureSettings,
       fontFaceName,
@@ -2239,6 +2294,7 @@
       const syncedFontSettings = normalizeFontSettings({
         enabled: fontOverrideEnabled,
         family: fontFamily,
+        monospaceFamily: fontMonospaceFamily,
         weight: fontWeight,
         featureSettings: fontFeatureSettings,
         faceName: fontFaceName,
@@ -2434,6 +2490,7 @@
       const hasFontChange =
         changes.fontOverrideEnabled ||
         changes.fontFamily ||
+        changes.fontMonospaceFamily ||
         changes.fontWeight ||
         changes.fontFeatureSettings ||
         changes.fontFaceName ||
@@ -2447,6 +2504,9 @@
           family: changes.fontFamily
             ? changes.fontFamily.newValue
             : currentFontSettings.family,
+          monospaceFamily: changes.fontMonospaceFamily
+            ? changes.fontMonospaceFamily.newValue
+            : currentFontSettings.monospaceFamily,
           weight: changes.fontWeight
             ? changes.fontWeight.newValue
             : currentFontSettings.weight,

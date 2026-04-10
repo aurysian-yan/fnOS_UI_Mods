@@ -37,6 +37,7 @@
   const fontOverrideEnabledEl = document.getElementById("fontOverrideEnabled");
   const fontSettingsEl = document.getElementById("fontSettings");
   const fontFamilyEl = document.getElementById("fontFamily");
+  const fontMonospaceFamilyEl = document.getElementById("fontMonospaceFamily");
   const fontWeightEl = document.getElementById("fontWeight");
   const fontFeatureSettingsEl = document.getElementById("fontFeatureSettings");
   const fontFaceNameEl = document.getElementById("fontFaceName");
@@ -92,6 +93,7 @@
   const DEFAULT_FONT_SETTINGS = {
     enabled: false,
     family: "",
+    monospaceFamily: "",
     weight: "",
     featureSettings: "",
     faceName: DEFAULT_FONT_FACE_NAME,
@@ -1221,6 +1223,7 @@
     return {
       enabled: Boolean(raw?.enabled),
       family: normalizeFontFamily(raw?.family),
+      monospaceFamily: normalizeFontFamily(raw?.monospaceFamily),
       weight: normalizeFontWeight(raw?.weight),
       featureSettings: normalizeFontFeatureSettings(raw?.featureSettings),
       faceName: normalizeFontFaceName(raw?.faceName),
@@ -1317,6 +1320,9 @@
     if (fontFamilyEl) {
       fontFamilyEl.value = next.family;
     }
+    if (fontMonospaceFamilyEl) {
+      fontMonospaceFamilyEl.value = next.monospaceFamily;
+    }
     if (fontWeightEl) {
       fontWeightEl.value = next.weight;
     }
@@ -1356,6 +1362,7 @@
     return normalizeFontSettings({
       enabled: fontOverrideEnabledEl?.checked,
       family: fontFamilyEl?.value,
+      monospaceFamily: fontMonospaceFamilyEl?.value,
       weight: fontWeightEl?.value,
       featureSettings: fontFeatureSettingsEl?.value,
       faceName: fontFaceNameEl?.value,
@@ -1532,6 +1539,7 @@
     return safeSyncSet({
       fontOverrideEnabled: next.enabled,
       fontFamily: next.family,
+      fontMonospaceFamily: next.monospaceFamily,
       fontWeight: next.weight,
       fontFeatureSettings: next.featureSettings,
       fontFaceName: next.faceName,
@@ -1736,6 +1744,7 @@
 
     if (fontOverrideEnabledEl) fontOverrideEnabledEl.disabled = true;
     if (fontFamilyEl) fontFamilyEl.disabled = true;
+    if (fontMonospaceFamilyEl) fontMonospaceFamilyEl.disabled = true;
     if (fontWeightEl) fontWeightEl.disabled = true;
     if (fontFeatureSettingsEl) fontFeatureSettingsEl.disabled = true;
     if (fontFaceNameEl) fontFaceNameEl.disabled = true;
@@ -1792,6 +1801,7 @@
     brandColor: DEFAULT_BRAND_COLOR,
     fontOverrideEnabled: DEFAULT_FONT_SETTINGS.enabled,
     fontFamily: DEFAULT_FONT_SETTINGS.family,
+    fontMonospaceFamily: DEFAULT_FONT_SETTINGS.monospaceFamily,
     fontWeight: DEFAULT_FONT_SETTINGS.weight,
     fontFeatureSettings: DEFAULT_FONT_SETTINGS.featureSettings,
     fontFaceName: DEFAULT_FONT_SETTINGS.faceName,
@@ -1828,6 +1838,7 @@
   fontSettings = normalizeFontSettings({
     enabled: state.fontOverrideEnabled,
     family: state.fontFamily,
+    monospaceFamily: state.fontMonospaceFamily,
     weight: state.fontWeight,
     featureSettings: state.fontFeatureSettings,
     faceName: state.fontFaceName,
@@ -2080,6 +2091,7 @@
 
   for (const inputEl of [
     fontFamilyEl,
+    fontMonospaceFamilyEl,
     fontWeightEl,
     fontFeatureSettingsEl,
     fontFaceNameEl,
