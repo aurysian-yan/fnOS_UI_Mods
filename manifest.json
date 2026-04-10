@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "飞牛自定义工具",
   "description": "通过浏览器插件向 FnOS WebUI 注入 CSS/JS，提供更多 UI 可自定义选项。",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "permissions": [
     "storage",
     "tabs",
