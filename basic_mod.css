@@ -541,6 +541,36 @@ body:not([theme-mode="dark"]) {
     backdrop-filter: blur(18px);
 }
 
+/* 更新弹窗 */
+
+.semi-modal-body-wrapper .\!px-9.\!py-6.text-text-0 .bg-\[linear-gradient\(180deg\,_\#D7E6F9_0\%\,_\#FFF_100\%\)\] {
+    background-image: linear-gradient(180deg, rgba(var(--semi-brand-5), 0.5), transparent);
+}
+
+.semi-modal-body-wrapper .\!px-9.\!py-6.text-text-0 {
+    padding: 24px 28px !important;
+}
+
+.semi-modal-body-wrapper .\!px-9.\!py-6.text-text-0 .flex.gap-x-6 {
+    gap: 16px
+}
+
+.semi-notification-notice.semi-notification-notice-icon-show.semi-notification-notice-default {
+    border-radius: 20px;
+    corner-shape: superellipse(1.5);
+    background-color: var(--semi-color-Component-card);
+    backdrop-filter: blur(18px);
+    margin-top: 28px;
+    margin-right: 16px;
+}
+
+
+.semi-notification-notice-content-wrapper,
+.semi-notification-notice-content-wrapper .semi-notification-notice-title {
+    display: flex;
+    margin-bottom: 0 !important;
+}
+
 /* 表格 */
 
 .semi-table-thead>.semi-table-row>.semi-table-row-head.semi-table-cell-fixed-left:before,
