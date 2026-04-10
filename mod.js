@@ -1394,11 +1394,268 @@ function setupLoginClock() {
     }
 }
 
+function setupSmoothScrollContainers() {
+    if (window._fnosSmoothScrollInitialized) return;
+    window._fnosSmoothScrollInitialized = true;
+
+    const CLIP_CLASS = 'fnos-smooth-scroll-clip';
+    const MASK_CLASS = 'fnos-smooth-scroll-mask';
+    const HOST_CLASS = 'fnos-smooth-scroll-host';
+    const MASK_SMOOTHING = 0.2;
+    let bodyObserver = null;
+    let scheduled = false;
+    let squircleCounter = 0;
+    const maskResizeObservers = new WeakMap();
+    const maskObserverRefs = new Set();
+
+    function hasClassTokens(el, tokens) {
+        return tokens.every((token) => el.classList.contains(token));
+    }
+
+    function findMetricCard(el) {
+        let current = el;
+        while (current instanceof HTMLElement) {
+            if (
+                hasClassTokens(current, [
+                    'w-full',
+                    'min-h-[160px]',
+                    'box-border',
+                    'rounded-xl',
+                    'flex',
+                    'flex-col',
+                    'bg-[var(--semi-color-Component-card)]'
+                ])
+            ) {
+                return current;
+            }
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    function findRoundedAncestor(el) {
+        let current = el;
+        while (current instanceof HTMLElement) {
+            const styles = window.getComputedStyle(current);
+            const radius = Number.parseFloat(styles.borderTopLeftRadius || '0');
+            if (radius > 0) {
+                return current;
+            }
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    function resolveClipRoot(host) {
+        const parent = host.parentElement;
+        if (!(parent instanceof HTMLElement)) return null;
+        const candidate = parent.classList.contains(MASK_CLASS) ? parent.parentElement : parent;
+        if (!(candidate instanceof HTMLElement)) return null;
+
+        if (
+            hasClassTokens(candidate, [
+                'box-border',
+                'flex',
+                'w-full',
+                'flex-1',
+                'overflow-hidden'
+            ])
+        ) {
+            return candidate;
+        }
+
+        if (
+            hasClassTokens(candidate, [
+                'flex-1',
+                'flex',
+                'flex-col',
+                'w-full',
+                'max-h-[260px]',
+                'box-border',
+                'overflow-hidden'
+            ])
+        ) {
+            return candidate;
+        }
+
+        return null;
+    }
+
+    function ensureMaskWrapper(host, clipRoot) {
+        const parent = host.parentElement;
+        if (parent instanceof HTMLElement && parent.classList.contains(MASK_CLASS)) {
+            return parent;
+        }
+
+        const mask = document.createElement('div');
+        mask.className = MASK_CLASS;
+        clipRoot.insertBefore(mask, host);
+        mask.appendChild(host);
+        return mask;
+    }
+
+    function applyMaskSquircle(mask, radius, smoothing) {
+        if (!(mask instanceof HTMLElement)) return;
+        if (typeof window.applyFigmaSquircle !== 'function') return;
+
+        if (!mask.dataset.fnosSmoothScrollMaskId) {
+            squircleCounter += 1;
+            mask.dataset.fnosSmoothScrollMaskId = `fnos-smooth-scroll-mask-${squircleCounter}`;
+        }
+
+        const rect = mask.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        window.applyFigmaSquircle(
+            mask,
+            radius,
+            smoothing,
+            mask.dataset.fnosSmoothScrollMaskId
+        );
+    }
+
+    function ensureMaskObserver(mask) {
+        if (!(mask instanceof HTMLElement)) return;
+        if (maskResizeObservers.has(mask)) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            const radius = Number.parseFloat(mask.dataset.fnosSmoothScrollRadius || '16') || 16;
+            const smoothing =
+                Number.parseFloat(mask.dataset.fnosSmoothScrollSmoothing || `${MASK_SMOOTHING}`) ||
+                MASK_SMOOTHING;
+
+            window.requestAnimationFrame(() => {
+                applyMaskSquircle(mask, radius, smoothing);
+            });
+        });
+
+        resizeObserver.observe(mask);
+        maskResizeObservers.set(mask, resizeObserver);
+        maskObserverRefs.add(resizeObserver);
+    }
+
+    function decorateHost(host) {
+        if (!(host instanceof HTMLElement)) return;
+        if (!hasClassTokens(host, ['ms-container', 'w-full'])) return;
+
+        const clipRoot = resolveClipRoot(host);
+        if (!(clipRoot instanceof HTMLElement)) return;
+
+        const visualSource =
+            findMetricCard(clipRoot) ||
+            findRoundedAncestor(clipRoot) ||
+            clipRoot;
+        if (!(visualSource instanceof HTMLElement)) return;
+
+        const mask = ensureMaskWrapper(host, clipRoot);
+        if (!(mask instanceof HTMLElement)) return;
+
+        const sourceStyle = window.getComputedStyle(visualSource);
+        const radius =
+            sourceStyle.borderTopLeftRadius &&
+            sourceStyle.borderTopLeftRadius !== '0px'
+                ? sourceStyle.borderTopLeftRadius
+                : '16px';
+        const cornerShape =
+            sourceStyle.getPropertyValue('corner-shape').trim() || 'superellipse(1.5)';
+        const visualRadius = 12.6;
+        const maskRadius = Math.max(0, visualRadius - 0.5);
+        const visualRadiusPx = `${visualRadius}px`;
+
+        clipRoot.classList.add(CLIP_CLASS);
+        mask.classList.add(MASK_CLASS);
+        host.classList.add(HOST_CLASS);
+        clipRoot.style.setProperty('--fnos-scroll-layer-radius', visualRadiusPx);
+        clipRoot.style.setProperty('--fnos-scroll-layer-corner-shape', cornerShape);
+        mask.style.setProperty('--fnos-scroll-layer-radius', visualRadiusPx);
+        mask.style.setProperty('--fnos-scroll-layer-corner-shape', cornerShape);
+        host.style.setProperty('--fnos-scroll-layer-radius', visualRadiusPx);
+        host.style.setProperty('--fnos-scroll-layer-corner-shape', cornerShape);
+        mask.dataset.fnosSmoothScrollRadius = `${maskRadius}`;
+        mask.dataset.fnosSmoothScrollSmoothing = `${MASK_SMOOTHING}`;
+        ensureMaskObserver(mask);
+        applyMaskSquircle(mask, maskRadius, MASK_SMOOTHING);
+    }
+
+    function scan(root) {
+        if (!root || typeof root.querySelectorAll !== 'function') return;
+
+        if (root instanceof HTMLElement && hasClassTokens(root, ['ms-container', 'w-full'])) {
+            decorateHost(root);
+        }
+
+        root.querySelectorAll('.ms-container.w-full').forEach((host) => {
+            decorateHost(host);
+        });
+    }
+
+    function scheduleScan(target) {
+        if (scheduled) return;
+        scheduled = true;
+        window.requestAnimationFrame(() => {
+            scheduled = false;
+            scan(target || document);
+        });
+    }
+
+    function startObserving() {
+        if (!(document.body instanceof HTMLElement)) return;
+
+        scan(document);
+
+        bodyObserver = new MutationObserver((mutations) => {
+            let shouldScan = false;
+
+            mutations.forEach((mutation) => {
+                if (shouldScan) return;
+                if (mutation.type === 'childList') {
+                    shouldScan =
+                        mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
+                    return;
+                }
+                if (mutation.type === 'attributes' && mutation.target instanceof HTMLElement) {
+                    shouldScan = true;
+                }
+            });
+
+            if (shouldScan) {
+                scheduleScan(document);
+            }
+        });
+
+        bodyObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class', 'style']
+        });
+
+        window._cleanupSmoothScrollContainers = () => {
+            if (bodyObserver) {
+                bodyObserver.disconnect();
+                bodyObserver = null;
+            }
+            maskObserverRefs.forEach((observer) => {
+                observer.disconnect();
+            });
+            maskObserverRefs.clear();
+        };
+    }
+
+    if (document.body) {
+        startObserving();
+        return;
+    }
+
+    document.addEventListener('DOMContentLoaded', startObserving, { once: true });
+}
+
 
 // 初始化函数
 function initialize() {
     setupLoginClock();
 	applyFigmaSquirclesFromConfig();
+    setupSmoothScrollContainers();
     setupAppWindowAnimations();
     setupTaskbarItemAnimations();
 }
@@ -1409,6 +1666,7 @@ document.addEventListener("DOMContentLoaded", initialize);
 applyFigmaSquirclesFromConfig();
 if (document.readyState !== 'loading') {
     setupLoginClock();
+    setupSmoothScrollContainers();
     setupAppWindowAnimations();
     setupTaskbarItemAnimations();
 }

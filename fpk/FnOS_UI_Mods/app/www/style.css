@@ -52,18 +52,13 @@
 }
 
 @supports(corner-shape: superellipse(1.5)) {
-  :root {
-    --radius-xs: calc(6px * 1.5);
-    --radius-sm: calc(8px * 1.5);
-    --radius-md: calc(12px * 1.5);
-    --radius-lg: calc(16px * 1.5);
-    --radius-xl: calc(20px * 1.5);
+  * {
+    corner-shape: superellipse(1.5);
   }
 }
 
 * {
   box-sizing: border-box;
-  corner-shape: superellipse(1.5);
   user-select: none;
 }
 
@@ -888,20 +883,24 @@ textarea::-webkit-scrollbar-track {
   .preset-card .font-settings,
   .preset-card .color-settings,
   .preset-card .custom-code-settings,
-  .preset-card .launchpad-extra-settings,
   .message {
-    border-radius: 16px;
+    border-radius: 10px;
+    corner-shape: superellipse(1.5);
+  }
+
+  .preset-card .launchpad-extra-settings {
+    border-radius: 14px;
     corner-shape: superellipse(1.5);
   }
 
   .preset-card .field-input,
   .preset-card .launchpad-app-list {
-    border-radius: 6px;
+    border-radius: 4px;
     corner-shape: superellipse(1.5);
   }
 
   button {
-    border-radius: calc(10px * 1.5);
+    border-radius: 10px;
     corner-shape: superellipse(1.5);
   }
 }

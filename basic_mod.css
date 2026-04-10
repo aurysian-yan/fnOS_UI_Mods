@@ -178,8 +178,70 @@
 }
 
 .transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div:first-of-type {
-    border-radius: 999px;
-    corner-shape: superellipse(1.5);
+    --fnos-scroll-layer-radius: 16px;
+    --fnos-scroll-layer-corner-shape: superellipse(1.5);
+    border-radius: var(--fnos-scroll-layer-radius);
+    corner-shape: var(--fnos-scroll-layer-corner-shape);
+}
+
+.fnos-smooth-scroll-clip,
+.fnos-smooth-scroll-mask,
+.fnos-smooth-scroll-host {
+    --fnos-scroll-layer-radius: 16px;
+    --fnos-scroll-layer-corner-shape: superellipse(1.5);
+    border-radius: var(--fnos-scroll-layer-radius, 16px);
+    corner-shape: var(--fnos-scroll-layer-corner-shape, superellipse(1.5));
+}
+
+.fnos-smooth-scroll-clip {
+    min-height: 0;
+    position: relative;
+}
+
+.fnos-smooth-scroll-mask {
+    border-radius: var(--fnos-scroll-layer-radius, 16px);
+    corner-shape: var(--fnos-scroll-layer-corner-shape, superellipse(1.5));
+    overflow: hidden !important;
+    isolation: isolate;
+    min-height: 0;
+    max-height: 100%;
+    width: 100%;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background-clip: padding-box;
+}
+
+.fnos-smooth-scroll-host {
+    border-radius: inherit;
+    corner-shape: inherit;
+    overflow: auto !important;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    width: 100%;
+    flex: 1 1 auto;
+    background-clip: padding-box;
+    position: relative;
+    z-index: 1;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+
+.fnos-smooth-scroll-host>.ms-track-box+* {
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1 {
+    padding-right: 6px;
+}
+
+.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1[style="width: 100%;"] {
+    padding-left: 8px;
 }
 
 .bg-\[var\(--semi-color-app\)\] {
@@ -209,6 +271,82 @@ div.absolute.right-0.top-0.z-50.flex.size-loose.items-center.justify-end.pt-2:ha
     position: absolute;
     top: -49px;
     right: 98px;
+}
+
+
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 p.w-\[37px\].shrink-0.whitespace-normal.text-center.align-top.text-\[10px\].font-medium.leading-\[10px\].text-\[var\(--semi-color-text-0\)\] {
+    text-align: right !important;
+}
+
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 p.text-\[var\(--semi-color-primary\)\] {
+    color: var(--semi-color-data-4) !important;
+}
+
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 p.text-\[var\(--semi-color-success\)\] {
+    color: var(--semi-color-data-6) !important;
+}
+
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 svg.text-\[var\(--semi-color-primary\)\],
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 svg.text-\[var\(--semi-color-primary\)\] * {
+    color: var(--semi-color-data-4) !important;
+    fill: var(--semi-color-data-4) !important;
+}
+
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 svg.text-\[var\(--semi-color-success\)\],
+div.transition-all.duration-200.relative.box-border.flex.h-9.shrink-0.items-center.justify-between.rounded-2xl.px-3.py-1>div.absolute.left-3.top-2 svg.text-\[var\(--semi-color-success\)\] * {
+    color: var(--semi-color-data-6) !important;
+    fill: var(--semi-color-data-6) !important;
+}
+
+/* 右侧面板作用域 */
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] p.w-\[37px\].shrink-0.whitespace-normal.text-center.align-top.text-\[10px\].font-medium.leading-\[10px\].text-\[var\(--semi-color-text-0\)\] {
+    text-align: right !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .text-\[var\(--semi-color-primary\)\],
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .semi-typography-primary {
+    color: var(--semi-color-data-4) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .text-\[var\(--semi-color-success\)\] {
+    color: var(--semi-color-data-6) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] svg.text-\[var\(--semi-color-primary\)\],
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] svg.text-\[var\(--semi-color-primary\)\] * {
+    color: var(--semi-color-data-4) !important;
+    fill: currentColor !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] svg.text-\[var\(--semi-color-success\)\],
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] svg.text-\[var\(--semi-color-success\)\] * {
+    color: var(--semi-color-data-6) !important;
+    fill: currentColor !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .semi-progress-circle-ring-inner {
+    stroke: var(--semi-color-data-4) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .semi-progress-track-inner {
+    background: var(--semi-color-data-4) !important;
+    background-color: var(--semi-color-data-4) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .recharts-wrapper [stroke="var(--semi-color-primary)"] {
+    stroke: var(--semi-color-data-4) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .recharts-wrapper [stroke="var(--semi-color-success)"] {
+    stroke: var(--semi-color-data-6) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .recharts-wrapper stop[stop-color="var(--semi-color-primary)"] {
+    stop-color: var(--semi-color-data-4) !important;
+}
+
+div.absolute.right-\[14px\].top-\[17px\].overflow-hidden.rounded-2xl.z-\[1\].bottom-\[17px\] .recharts-wrapper stop[stop-color="var(--semi-color-success)"] {
+    stop-color: var(--semi-color-data-6) !important;
 }
 
 /* ========= 窗口标题栏&按钮 ========= */

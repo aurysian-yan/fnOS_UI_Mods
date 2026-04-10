@@ -1,10 +1,6 @@
 /* ## 类 Windows 样式 ## */
 
 .trim-ui__app-layout--window {
-    border-radius: 28px !important;
-}
-
-.trim-ui__app-layout--window {
     border-radius: 20px !important;
 }
 

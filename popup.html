@@ -748,7 +748,7 @@
 
     @supports (corner-shape: superellipse(1.5)) {
       .launchpad-app-list {
-        border-radius: 6px;
+        border-radius: 4px;
         corner-shape: superellipse(1.5);
       }
     }
@@ -846,17 +846,22 @@
 
       .platform-group,
       .font-settings,
+      .login-wallpaper-settings,
       .color-settings,
       .custom-code-settings,
       .desktop-icon-settings,
-      .launchpad-extra-settings,
       .update-panel {
-        border-radius: 16px;
+        border-radius: 10px;
+        corner-shape: superellipse(1.5);
+      }
+
+      .launchpad-extra-settings {
+        border-radius: 14px;
         corner-shape: superellipse(1.5);
       }
 
       .field-input {
-        border-radius: 6px;
+        border-radius: 4px;
         corner-shape: superellipse(1.5);
       }
     }
