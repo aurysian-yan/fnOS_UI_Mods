@@ -65,6 +65,28 @@
     backdrop-filter: saturate(2) blur(var(--fnos-window-current-backdrop-blur)) !important;
     transform-origin: center top;
     will-change: transform, opacity, filter, backdrop-filter;
+    transition: backdrop-filter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.trim-ui__app-layout--window .bg-\[var\(--semi-color-app\)\],
+.trim-ui__app-layout--window .bg-\[var\(--semi-color-app-container\)\] {
+    transition:
+        background-color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.trim-ui__app-layout--window.fnos-window--modal-open {
+    --fnos-window-current-backdrop-blur: 0px;
+    backdrop-filter: none !important;
+}
+
+.trim-ui__app-layout--window.fnos-window--modal-open .bg-\[var\(--semi-color-app\)\] {
+    background-color: var(--semi-color-app) !important;
+}
+
+.trim-ui__app-layout--window.fnos-window--modal-open .bg-\[var\(--semi-color-app-container\)\] {
+    background-color: var(--semi-color-app-container) !important;
 }
 
 .trim-ui__app-layout--window.fnos-window--enter {
@@ -90,6 +112,19 @@
 .trim-ui__app-layout--window.fnos-window--exit-minimize,
 .trim-ui__app-layout--window.fnos-window--restore {
     transform-origin: center center;
+}
+
+#root .semi-modal-mask {
+    background-color: color-mix(in srgb, var(--semi-color-app) 75%, transparent) !important;
+    backdrop-filter: blur(6px) !important;
+}
+
+#root .semi-modal-mask::before {
+    content: "";
+    width: 100%;
+    height: 52px;
+    display: block;
+    background-image: linear-gradient(to bottom, var(--semi-color-app), transparent);
 }
 
 @keyframes fnos-window-enter {

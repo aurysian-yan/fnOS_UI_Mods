@@ -397,6 +397,7 @@ function setupAppWindowAnimations() {
     const WINDOW_EXIT_CLOSE_CLASS = 'fnos-window--exit-close';
     const WINDOW_EXIT_MINIMIZE_CLASS = 'fnos-window--exit-minimize';
     const WINDOW_RESTORE_CLASS = 'fnos-window--restore';
+    const WINDOW_MODAL_OPEN_CLASS = 'fnos-window--modal-open';
     const ENTER_DURATION_MS = 300;
     const EXIT_DURATION_MS = 600;
     const RESTORE_DURATION_MS = 600;
@@ -446,6 +447,29 @@ function setupAppWindowAnimations() {
         const styles = window.getComputedStyle(windowEl);
         if (styles.display === 'none' || styles.visibility === 'hidden') return false;
         return windowEl.getClientRects().length > 0;
+    }
+
+    function isElementVisible(element) {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hasAttribute('hidden')) return false;
+        if (element.getAttribute('aria-hidden') === 'true') return false;
+
+        const styles = window.getComputedStyle(element);
+        if (styles.display === 'none' || styles.visibility === 'hidden') return false;
+        return element.getClientRects().length > 0;
+    }
+
+    function windowHasVisibleModal(windowEl) {
+        if (!(windowEl instanceof HTMLElement)) return false;
+
+        return Array.from(
+            windowEl.querySelectorAll('.semi-modal-wrap, .semi-modal, .semi-modal-popup')
+        ).some((modalEl) => isElementVisible(modalEl));
+    }
+
+    function syncWindowModalState(windowEl) {
+        if (!(windowEl instanceof HTMLElement)) return;
+        windowEl.classList.toggle(WINDOW_MODAL_OPEN_CLASS, windowHasVisibleModal(windowEl));
     }
 
     function normalizeIconKey(src) {
@@ -559,6 +583,7 @@ function setupAppWindowAnimations() {
         const isVisible = isWindowVisible(windowEl);
         const previousVisible = windowVisibility.get(windowEl);
         windowVisibility.set(windowEl, isVisible);
+        syncWindowModalState(windowEl);
 
         if (
             previousVisible === false &&
@@ -685,6 +710,14 @@ function setupAppWindowAnimations() {
                 mutations.forEach((mutation) => {
                     if (mutation.type === 'childList') {
                         mutation.addedNodes.forEach(scanWindowNodes);
+
+                        const parentWindow =
+                            mutation.target instanceof Element
+                                ? mutation.target.closest('.trim-ui__app-layout--window')
+                                : null;
+                        if (parentWindow instanceof HTMLElement) {
+                            updateWindowVisibility(parentWindow);
+                        }
                         return;
                     }
                     if (mutation.type === 'attributes') {
