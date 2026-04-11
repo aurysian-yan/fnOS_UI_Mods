@@ -397,6 +397,7 @@ function setupAppWindowAnimations() {
     const WINDOW_EXIT_CLOSE_CLASS = 'fnos-window--exit-close';
     const WINDOW_EXIT_MINIMIZE_CLASS = 'fnos-window--exit-minimize';
     const WINDOW_RESTORE_CLASS = 'fnos-window--restore';
+    const WINDOW_MODAL_OPEN_CLASS = 'fnos-window--modal-open';
     const ENTER_DURATION_MS = 300;
     const EXIT_DURATION_MS = 600;
     const RESTORE_DURATION_MS = 600;
@@ -446,6 +447,29 @@ function setupAppWindowAnimations() {
         const styles = window.getComputedStyle(windowEl);
         if (styles.display === 'none' || styles.visibility === 'hidden') return false;
         return windowEl.getClientRects().length > 0;
+    }
+
+    function isElementVisible(element) {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hasAttribute('hidden')) return false;
+        if (element.getAttribute('aria-hidden') === 'true') return false;
+
+        const styles = window.getComputedStyle(element);
+        if (styles.display === 'none' || styles.visibility === 'hidden') return false;
+        return element.getClientRects().length > 0;
+    }
+
+    function windowHasVisibleModal(windowEl) {
+        if (!(windowEl instanceof HTMLElement)) return false;
+
+        return Array.from(
+            windowEl.querySelectorAll('.semi-modal-wrap, .semi-modal, .semi-modal-popup')
+        ).some((modalEl) => isElementVisible(modalEl));
+    }
+
+    function syncWindowModalState(windowEl) {
+        if (!(windowEl instanceof HTMLElement)) return;
+        windowEl.classList.toggle(WINDOW_MODAL_OPEN_CLASS, windowHasVisibleModal(windowEl));
     }
 
     function normalizeIconKey(src) {
@@ -559,6 +583,7 @@ function setupAppWindowAnimations() {
         const isVisible = isWindowVisible(windowEl);
         const previousVisible = windowVisibility.get(windowEl);
         windowVisibility.set(windowEl, isVisible);
+        syncWindowModalState(windowEl);
 
         if (
             previousVisible === false &&
@@ -685,6 +710,14 @@ function setupAppWindowAnimations() {
                 mutations.forEach((mutation) => {
                     if (mutation.type === 'childList') {
                         mutation.addedNodes.forEach(scanWindowNodes);
+
+                        const parentWindow =
+                            mutation.target instanceof Element
+                                ? mutation.target.closest('.trim-ui__app-layout--window')
+                                : null;
+                        if (parentWindow instanceof HTMLElement) {
+                            updateWindowVisibility(parentWindow);
+                        }
                         return;
                     }
                     if (mutation.type === 'attributes') {
@@ -739,9 +772,11 @@ function setupTaskbarItemAnimations() {
     const EXIT_GHOST_CLASS = 'fnos-taskbar-item--exit-ghost';
     const TASKBAR_LIST_SELECTOR =
         '.scrollbar-hidden.absolute.inset-0.flex.flex-col.items-end.justify-start.gap-2.overflow-y-auto.pt-2';
-    const ENTER_DURATION_MS = 320;
-    const EXIT_DURATION_MS = 260;
-    const LIST_RESIZE_DURATION_MS = 260;
+    const ENTER_DURATION_MS = 300;
+    const EXIT_DURATION_MS = 240;
+    const LIST_RESIZE_DURATION_MS = 220;
+    const ENABLE_LIST_RESIZE_ANIMATION = true;
+    const MAX_LIST_RESIZE_ANIMATION_DELTA_PX = 140;
     const trackedEntries = new WeakSet();
     const knownEntryRects = new WeakMap();
     const knownListHeights = new WeakMap();
@@ -813,6 +848,40 @@ function setupTaskbarItemAnimations() {
         knownListHeights.set(listEl, rect.height);
     }
 
+    function measureTaskbarListNaturalHeight(listEl) {
+        if (!(listEl instanceof HTMLElement)) return 0;
+        if (!(document.body instanceof HTMLElement)) {
+            const fallbackRect = listEl.getBoundingClientRect();
+            return fallbackRect.height > 0 ? fallbackRect.height : 0;
+        }
+
+        const clone = listEl.cloneNode(true);
+        if (!(clone instanceof HTMLElement)) return 0;
+        const renderedWidth = listEl.getBoundingClientRect().width;
+
+        clone.style.position = 'fixed';
+        clone.style.left = '-10000px';
+        clone.style.top = '-10000px';
+        clone.style.right = 'auto';
+        clone.style.bottom = 'auto';
+        clone.style.inset = 'auto';
+        clone.style.width = renderedWidth > 0 ? `${renderedWidth}px` : 'auto';
+        clone.style.visibility = 'hidden';
+        clone.style.pointerEvents = 'none';
+        clone.style.height = 'auto';
+        clone.style.minHeight = '0';
+        clone.style.maxHeight = 'none';
+        clone.style.overflow = 'visible';
+        clone.style.transition = 'none';
+        clone.style.zIndex = '-1';
+
+        document.body.appendChild(clone);
+        const naturalHeight = clone.getBoundingClientRect().height;
+        clone.remove();
+
+        return naturalHeight > 0 ? naturalHeight : 0;
+    }
+
     function scheduleSnapshot() {
         if (snapshotScheduled) return;
         snapshotScheduled = true;
@@ -826,55 +895,138 @@ function setupTaskbarItemAnimations() {
         });
     }
 
-    function animateTaskbarListResize(listEl) {
+    function readCssPixelValue(value) {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function getTaskbarItemOuterHeight(entryEl) {
+        if (!(entryEl instanceof HTMLElement)) return 0;
+
+        const rect = entryEl.getBoundingClientRect();
+        let height = rect.height;
+        if (!(height > 0)) {
+            const cachedRect = knownEntryRects.get(entryEl);
+            height = cachedRect && cachedRect.height > 0 ? cachedRect.height : 0;
+        }
+        if (!(height > 0)) return 0;
+
+        if (!entryEl.isConnected) {
+            return height;
+        }
+
+        const style = window.getComputedStyle(entryEl);
+        const marginTop = readCssPixelValue(style.marginTop);
+        const marginBottom = readCssPixelValue(style.marginBottom);
+        return height + marginTop + marginBottom;
+    }
+
+    function getTaskbarListRowGap(listEl) {
+        if (!(listEl instanceof HTMLElement)) return 0;
+        const style = window.getComputedStyle(listEl);
+        const rowGap = readCssPixelValue(style.rowGap);
+        if (rowGap > 0) return rowGap;
+        return readCssPixelValue(style.gap);
+    }
+
+    function getTaskbarItemCount(listEl) {
+        if (!(listEl instanceof HTMLElement)) return 0;
+        let count = 0;
+        listEl.querySelectorAll(TASKBAR_ITEM_SELECTOR).forEach((entryEl) => {
+            if (!(entryEl instanceof HTMLElement)) return;
+            if (!isTaskbarAppItem(entryEl)) return;
+            count += 1;
+        });
+        return count;
+    }
+
+    function animateTaskbarListResize(listEl, options = {}) {
         if (!(listEl instanceof HTMLElement)) return;
+        const deltaHeight = Number.isFinite(options.deltaHeight) ? options.deltaHeight : null;
         const previousHeight = knownListHeights.get(listEl);
         const existingTimer = listResizeTimers.get(listEl);
+        const clearInlineResizeStyle = () => {
+            listEl.style.removeProperty('transition');
+            listEl.style.removeProperty('overflow');
+        };
+        const applyFinalHeight = (height) => {
+            listEl.style.transition = 'none';
+            listEl.style.removeProperty('height');
+            clearInlineResizeStyle();
+            knownListHeights.set(listEl, height);
+        };
+
         if (existingTimer) {
             window.clearTimeout(existingTimer);
             listResizeTimers.delete(listEl);
+            clearInlineResizeStyle();
+        }
+
+        const renderedHeight = listEl.getBoundingClientRect().height;
+        const measuredNaturalHeight = measureTaskbarListNaturalHeight(listEl);
+        let nextHeight = measuredNaturalHeight > 0 ? measuredNaturalHeight : renderedHeight;
+        let fromHeight =
+            Number.isFinite(previousHeight) && previousHeight > 0
+                ? previousHeight
+                : renderedHeight;
+
+        if (
+            Number.isFinite(deltaHeight) &&
+            Math.abs(deltaHeight) > 0.1 &&
+            Number.isFinite(previousHeight) &&
+            previousHeight > 0
+        ) {
+            nextHeight = Math.max(0, previousHeight + deltaHeight);
+            fromHeight = previousHeight;
+        }
+
+        if (existingTimer && renderedHeight > 0) {
+            // 中断上一段动画时，从当前渲染高度继续，避免突跳
+            fromHeight = renderedHeight;
+        }
+
+        if (nextHeight > 0 && (!Number.isFinite(fromHeight) || fromHeight <= 0)) {
+            fromHeight = nextHeight;
+        }
+
+        if (shouldReduceMotion() || !ENABLE_LIST_RESIZE_ANIMATION) {
+            if (nextHeight > 0) {
+                applyFinalHeight(nextHeight);
+            }
+            return;
+        }
+
+        if (!Number.isFinite(fromHeight) || fromHeight <= 0 || nextHeight <= 0) {
+            if (nextHeight > 0) {
+                applyFinalHeight(nextHeight);
+            }
+            return;
+        }
+        if (Math.abs(nextHeight - fromHeight) < 0.5) {
+            applyFinalHeight(nextHeight);
+            return;
+        }
+        if (Math.abs(nextHeight - fromHeight) > MAX_LIST_RESIZE_ANIMATION_DELTA_PX) {
+            applyFinalHeight(nextHeight);
+            return;
         }
 
         listEl.style.transition = 'none';
         listEl.style.overflow = 'hidden';
-        listEl.style.height = 'auto';
-        const nextHeight = listEl.getBoundingClientRect().height;
-        if (!Number.isFinite(previousHeight) || previousHeight <= 0 || nextHeight <= 0) {
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
-            if (nextHeight > 0) {
-                knownListHeights.set(listEl, nextHeight);
-            }
-            return;
-        }
-        if (Math.abs(nextHeight - previousHeight) < 0.5) {
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
-            knownListHeights.set(listEl, nextHeight);
-            return;
-        }
-        if (shouldReduceMotion()) {
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
-            knownListHeights.set(listEl, nextHeight);
-            return;
-        }
-
-        listEl.style.height = `${previousHeight}px`;
+        listEl.style.height = `${fromHeight}px`;
         void listEl.offsetHeight;
 
-        listEl.style.transition = `height ${LIST_RESIZE_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
-        listEl.style.height = `${nextHeight}px`;
-        knownListHeights.set(listEl, nextHeight);
+        window.requestAnimationFrame(() => {
+            if (!listEl.isConnected) return;
+            listEl.style.transition = `height ${LIST_RESIZE_DURATION_MS}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
+            listEl.style.height = `${nextHeight}px`;
+        });
 
         const timerId = window.setTimeout(() => {
             if (!listEl.isConnected) return;
-            listEl.style.removeProperty('height');
-            listEl.style.removeProperty('transition');
-            listEl.style.removeProperty('overflow');
+            const measuredFinalHeight = measureTaskbarListNaturalHeight(listEl);
+            const finalHeight = measuredFinalHeight > 0 ? measuredFinalHeight : nextHeight;
+            applyFinalHeight(finalHeight);
             listResizeTimers.delete(listEl);
             scheduleSnapshot();
         }, LIST_RESIZE_DURATION_MS + 40);
@@ -889,16 +1041,43 @@ function setupTaskbarItemAnimations() {
         trackedEntries.add(entryEl);
         snapshotEntryRect(entryEl);
         if (shouldReduceMotion()) return;
-
         entryEl.classList.remove(ENTER_CLASS);
-        void entryEl.offsetWidth;
-        entryEl.classList.add(ENTER_CLASS);
 
-        window.setTimeout(() => {
+        if (typeof entryEl.animate === 'function') {
+            entryEl.style.willChange = 'transform, opacity';
+            const animation = entryEl.animate(
+                [
+                    { opacity: 0, transform: 'translate3d(0, 5px, 0) scale(0.84)' },
+                    { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1.03)', offset: 0.6 },
+                    { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' }
+                ],
+                {
+                    duration: ENTER_DURATION_MS,
+                    easing: 'cubic-bezier(0.22, 0.85, 0.24, 1)',
+                    fill: 'both'
+                }
+            );
+
+            const clearAfterAnimation = () => {
+                if (!entryEl.isConnected) return;
+                entryEl.style.removeProperty('will-change');
+                snapshotEntryRect(entryEl);
+            };
+            animation.addEventListener('finish', clearAfterAnimation, { once: true });
+            animation.addEventListener('cancel', clearAfterAnimation, { once: true });
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
             if (!entryEl.isConnected) return;
-            entryEl.classList.remove(ENTER_CLASS);
-            snapshotEntryRect(entryEl);
-        }, ENTER_DURATION_MS + 40);
+            entryEl.classList.add(ENTER_CLASS);
+
+            window.setTimeout(() => {
+                if (!entryEl.isConnected) return;
+                entryEl.classList.remove(ENTER_CLASS);
+                snapshotEntryRect(entryEl);
+            }, ENTER_DURATION_MS + 40);
+        });
     }
 
     function animateTaskbarItemExit(entryEl) {
@@ -946,28 +1125,57 @@ function setupTaskbarItemAnimations() {
 
     function handleTaskbarListMutations(mutations) {
         if (!(currentTaskbarList instanceof HTMLElement)) return;
-        let hasEntryMutation = false;
+        const addedEntries = new Set();
+        const removedEntries = new Set();
 
         mutations.forEach((mutation) => {
             if (mutation.type !== 'childList') return;
 
             mutation.removedNodes.forEach((node) => {
                 collectTaskbarItems(node).forEach((entryEl) => {
-                    hasEntryMutation = true;
-                    animateTaskbarItemExit(entryEl);
+                    removedEntries.add(entryEl);
                 });
             });
 
             mutation.addedNodes.forEach((node) => {
                 collectTaskbarItems(node).forEach((entryEl) => {
-                    hasEntryMutation = true;
-                    animateTaskbarItemEnter(entryEl);
+                    addedEntries.add(entryEl);
                 });
             });
         });
 
-        if (!hasEntryMutation) return;
-        animateTaskbarListResize(currentTaskbarList);
+        addedEntries.forEach((entryEl) => {
+            if (!removedEntries.has(entryEl)) return;
+            addedEntries.delete(entryEl);
+            removedEntries.delete(entryEl);
+        });
+
+        const addedCount = addedEntries.size;
+        const removedCount = removedEntries.size;
+        if (!addedCount && !removedCount) return;
+
+        removedEntries.forEach((entryEl) => {
+            animateTaskbarItemExit(entryEl);
+        });
+        addedEntries.forEach((entryEl) => {
+            animateTaskbarItemEnter(entryEl);
+        });
+
+        const addedHeight = Array.from(addedEntries).reduce((sum, entryEl) => {
+            return sum + getTaskbarItemOuterHeight(entryEl);
+        }, 0);
+        const removedHeight = Array.from(removedEntries).reduce((sum, entryEl) => {
+            return sum + getTaskbarItemOuterHeight(entryEl);
+        }, 0);
+        const currentCount = getTaskbarItemCount(currentTaskbarList);
+        const previousCount = Math.max(0, currentCount - addedCount + removedCount);
+        const rowGap = getTaskbarListRowGap(currentTaskbarList);
+        const previousGapCount = Math.max(0, previousCount - 1);
+        const currentGapCount = Math.max(0, currentCount - 1);
+        const gapDeltaHeight = rowGap * (currentGapCount - previousGapCount);
+        const deltaHeight = addedHeight - removedHeight + gapDeltaHeight;
+
+        animateTaskbarListResize(currentTaskbarList, { deltaHeight });
         scheduleSnapshot();
     }
 
@@ -1073,10 +1281,414 @@ function setupTaskbarItemAnimations() {
     document.addEventListener('DOMContentLoaded', startObserving, { once: true });
 }
 
+function setupLoginClock() {
+    if (window._fnosLoginClockInitialized) return;
+    window._fnosLoginClockInitialized = true;
+
+    const CLOCK_ROOT_ID = 'fnos-login-clock';
+    const CLOCK_STYLE_ID = 'fnos-login-clock-style';
+    const LOGIN_READY_CLASS = 'fnos-login-injected-ready';
+    const LEGACY_LOGIN_PENDING_CLASS = 'fnos-login-pending';
+    const LEGACY_LOGIN_READY_CLASS = 'fnos-login-ready';
+    let clockTimer = null;
+
+    function cleanupClockRuntimeStyles() {
+        const styleEl = document.getElementById(CLOCK_STYLE_ID);
+        if (styleEl) {
+            styleEl.remove();
+        }
+    }
+
+    function clearLegacyLoginGate() {
+        const html = document.documentElement;
+        if (!(html instanceof HTMLElement)) return;
+        html.classList.remove(LEGACY_LOGIN_PENDING_CLASS);
+        html.classList.remove(LEGACY_LOGIN_READY_CLASS);
+    }
+
+    function markLoginReady() {
+        const html = document.documentElement;
+        if (!(html instanceof HTMLElement)) return;
+        html.classList.add(LOGIN_READY_CLASS);
+    }
+
+    function ensureClockRoot() {
+        let root = document.getElementById(CLOCK_ROOT_ID);
+        if (root instanceof HTMLElement) return root;
+        root = document.createElement('div');
+        root.id = CLOCK_ROOT_ID;
+        root.setAttribute('aria-hidden', 'true');
+        root.innerHTML = `
+<div class="fnos-login-clock-time">--:--</div>
+<div class="fnos-login-clock-date">---</div>
+`;
+        document.body.appendChild(root);
+        return root;
+    }
+
+    function isLoginView() {
+        const loginForm = document.querySelector('.login-form');
+        if (!(loginForm instanceof HTMLElement)) return false;
+
+        const computed = window.getComputedStyle(loginForm);
+        const isVisible =
+            computed.display !== 'none' &&
+            computed.visibility !== 'hidden' &&
+            Number.parseFloat(computed.opacity || '1') > 0.01 &&
+            loginForm.getClientRects().length > 0;
+        if (!isVisible) return false;
+
+        // Logged-in desktop view may keep login DOM nodes mounted.
+        // If desktop markers exist, treat current page as non-login state.
+        if (
+            document.querySelector(
+                '.trim-ui__app-layout--window, .trim-os__app-layout--files-container'
+            ) instanceof HTMLElement
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function updateClockText() {
+        const root = document.getElementById(CLOCK_ROOT_ID);
+        if (!(root instanceof HTMLElement)) return;
+        const timeEl = root.querySelector('.fnos-login-clock-time');
+        const dateEl = root.querySelector('.fnos-login-clock-date');
+        if (!(timeEl instanceof HTMLElement) || !(dateEl instanceof HTMLElement)) return;
+
+        const now = new Date();
+        const timeText = now.toLocaleTimeString('zh-CN', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const weekLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const week = weekLabels[now.getDay()] || '';
+        timeEl.textContent = `${week} ${timeText}`;
+        dateEl.style.display = 'none';
+        dateEl.textContent = '';
+    }
+
+    function updateClockVisibility() {
+        const root = document.getElementById(CLOCK_ROOT_ID);
+        if (!(root instanceof HTMLElement)) return;
+        root.style.display = isLoginView() ? '' : 'none';
+    }
+
+    function tickClock() {
+        if (isLoginView()) {
+            updateClockText();
+        }
+        updateClockVisibility();
+    }
+
+    function startClockTimer() {
+        if (clockTimer) return;
+        tickClock();
+        // Keep visibility checks responsive after route/DOM changes.
+        clockTimer = window.setInterval(tickClock, 1000);
+    }
+
+    function warmupLoginClockVisibility() {
+        // Login shell and React view may mount slightly after script injection.
+        // Retry a few times early so the clock appears as soon as login form is ready.
+        [80, 220, 450, 900, 1600, 2600, 3800].forEach((delay) => {
+            window.setTimeout(() => {
+                tickClock();
+            }, delay);
+        });
+    }
+
+    function mountClock() {
+        if (!(document.body instanceof HTMLElement)) return;
+        clearLegacyLoginGate();
+        cleanupClockRuntimeStyles();
+        ensureClockRoot();
+        startClockTimer();
+        tickClock();
+        warmupLoginClockVisibility();
+        window.addEventListener('load', tickClock);
+        window.addEventListener('pageshow', tickClock);
+        window.addEventListener('popstate', tickClock);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) tickClock();
+        });
+        window.requestAnimationFrame(() => {
+            markLoginReady();
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', mountClock, { once: true });
+    } else {
+        mountClock();
+    }
+}
+
+function setupSmoothScrollContainers() {
+    if (window._fnosSmoothScrollInitialized) return;
+    window._fnosSmoothScrollInitialized = true;
+
+    const CLIP_CLASS = 'fnos-smooth-scroll-clip';
+    const MASK_CLASS = 'fnos-smooth-scroll-mask';
+    const HOST_CLASS = 'fnos-smooth-scroll-host';
+    const MASK_SMOOTHING = 0.2;
+    let bodyObserver = null;
+    let scheduled = false;
+    let squircleCounter = 0;
+    const maskResizeObservers = new WeakMap();
+    const maskObserverRefs = new Set();
+
+    function hasClassTokens(el, tokens) {
+        return tokens.every((token) => el.classList.contains(token));
+    }
+
+    function findMetricCard(el) {
+        let current = el;
+        while (current instanceof HTMLElement) {
+            if (
+                hasClassTokens(current, [
+                    'w-full',
+                    'min-h-[160px]',
+                    'box-border',
+                    'rounded-xl',
+                    'flex',
+                    'flex-col',
+                    'bg-[var(--semi-color-Component-card)]'
+                ])
+            ) {
+                return current;
+            }
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    function findRoundedAncestor(el) {
+        let current = el;
+        while (current instanceof HTMLElement) {
+            const styles = window.getComputedStyle(current);
+            const radius = Number.parseFloat(styles.borderTopLeftRadius || '0');
+            if (radius > 0) {
+                return current;
+            }
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    function resolveClipRoot(host) {
+        const parent = host.parentElement;
+        if (!(parent instanceof HTMLElement)) return null;
+        const candidate = parent.classList.contains(MASK_CLASS) ? parent.parentElement : parent;
+        if (!(candidate instanceof HTMLElement)) return null;
+
+        if (
+            hasClassTokens(candidate, [
+                'box-border',
+                'flex',
+                'w-full',
+                'flex-1',
+                'overflow-hidden'
+            ])
+        ) {
+            return candidate;
+        }
+
+        if (
+            hasClassTokens(candidate, [
+                'flex-1',
+                'flex',
+                'flex-col',
+                'w-full',
+                'max-h-[260px]',
+                'box-border',
+                'overflow-hidden'
+            ])
+        ) {
+            return candidate;
+        }
+
+        return null;
+    }
+
+    function ensureMaskWrapper(host, clipRoot) {
+        const parent = host.parentElement;
+        if (parent instanceof HTMLElement && parent.classList.contains(MASK_CLASS)) {
+            return parent;
+        }
+
+        const mask = document.createElement('div');
+        mask.className = MASK_CLASS;
+        clipRoot.insertBefore(mask, host);
+        mask.appendChild(host);
+        return mask;
+    }
+
+    function applyMaskSquircle(mask, radius, smoothing) {
+        if (!(mask instanceof HTMLElement)) return;
+        if (typeof window.applyFigmaSquircle !== 'function') return;
+
+        if (!mask.dataset.fnosSmoothScrollMaskId) {
+            squircleCounter += 1;
+            mask.dataset.fnosSmoothScrollMaskId = `fnos-smooth-scroll-mask-${squircleCounter}`;
+        }
+
+        const rect = mask.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        window.applyFigmaSquircle(
+            mask,
+            radius,
+            smoothing,
+            mask.dataset.fnosSmoothScrollMaskId
+        );
+    }
+
+    function ensureMaskObserver(mask) {
+        if (!(mask instanceof HTMLElement)) return;
+        if (maskResizeObservers.has(mask)) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            const radius = Number.parseFloat(mask.dataset.fnosSmoothScrollRadius || '16') || 16;
+            const smoothing =
+                Number.parseFloat(mask.dataset.fnosSmoothScrollSmoothing || `${MASK_SMOOTHING}`) ||
+                MASK_SMOOTHING;
+
+            window.requestAnimationFrame(() => {
+                applyMaskSquircle(mask, radius, smoothing);
+            });
+        });
+
+        resizeObserver.observe(mask);
+        maskResizeObservers.set(mask, resizeObserver);
+        maskObserverRefs.add(resizeObserver);
+    }
+
+    function decorateHost(host) {
+        if (!(host instanceof HTMLElement)) return;
+        if (!hasClassTokens(host, ['ms-container', 'w-full'])) return;
+
+        const clipRoot = resolveClipRoot(host);
+        if (!(clipRoot instanceof HTMLElement)) return;
+
+        const visualSource =
+            findMetricCard(clipRoot) ||
+            findRoundedAncestor(clipRoot) ||
+            clipRoot;
+        if (!(visualSource instanceof HTMLElement)) return;
+
+        const mask = ensureMaskWrapper(host, clipRoot);
+        if (!(mask instanceof HTMLElement)) return;
+
+        const sourceStyle = window.getComputedStyle(visualSource);
+        const radius =
+            sourceStyle.borderTopLeftRadius &&
+            sourceStyle.borderTopLeftRadius !== '0px'
+                ? sourceStyle.borderTopLeftRadius
+                : '16px';
+        const cornerShape =
+            sourceStyle.getPropertyValue('corner-shape').trim() || 'superellipse(1.5)';
+        const visualRadius = 12.6;
+        const maskRadius = Math.max(0, visualRadius - 0.5);
+        const visualRadiusPx = `${visualRadius}px`;
+
+        clipRoot.classList.add(CLIP_CLASS);
+        mask.classList.add(MASK_CLASS);
+        host.classList.add(HOST_CLASS);
+        clipRoot.style.setProperty('--fnos-scroll-layer-radius', visualRadiusPx);
+        clipRoot.style.setProperty('--fnos-scroll-layer-corner-shape', cornerShape);
+        mask.style.setProperty('--fnos-scroll-layer-radius', visualRadiusPx);
+        mask.style.setProperty('--fnos-scroll-layer-corner-shape', cornerShape);
+        host.style.setProperty('--fnos-scroll-layer-radius', visualRadiusPx);
+        host.style.setProperty('--fnos-scroll-layer-corner-shape', cornerShape);
+        mask.dataset.fnosSmoothScrollRadius = `${maskRadius}`;
+        mask.dataset.fnosSmoothScrollSmoothing = `${MASK_SMOOTHING}`;
+        ensureMaskObserver(mask);
+        applyMaskSquircle(mask, maskRadius, MASK_SMOOTHING);
+    }
+
+    function scan(root) {
+        if (!root || typeof root.querySelectorAll !== 'function') return;
+
+        if (root instanceof HTMLElement && hasClassTokens(root, ['ms-container', 'w-full'])) {
+            decorateHost(root);
+        }
+
+        root.querySelectorAll('.ms-container.w-full').forEach((host) => {
+            decorateHost(host);
+        });
+    }
+
+    function scheduleScan(target) {
+        if (scheduled) return;
+        scheduled = true;
+        window.requestAnimationFrame(() => {
+            scheduled = false;
+            scan(target || document);
+        });
+    }
+
+    function startObserving() {
+        if (!(document.body instanceof HTMLElement)) return;
+
+        scan(document);
+
+        bodyObserver = new MutationObserver((mutations) => {
+            let shouldScan = false;
+
+            mutations.forEach((mutation) => {
+                if (shouldScan) return;
+                if (mutation.type === 'childList') {
+                    shouldScan =
+                        mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
+                    return;
+                }
+                if (mutation.type === 'attributes' && mutation.target instanceof HTMLElement) {
+                    shouldScan = true;
+                }
+            });
+
+            if (shouldScan) {
+                scheduleScan(document);
+            }
+        });
+
+        bodyObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class', 'style']
+        });
+
+        window._cleanupSmoothScrollContainers = () => {
+            if (bodyObserver) {
+                bodyObserver.disconnect();
+                bodyObserver = null;
+            }
+            maskObserverRefs.forEach((observer) => {
+                observer.disconnect();
+            });
+            maskObserverRefs.clear();
+        };
+    }
+
+    if (document.body) {
+        startObserving();
+        return;
+    }
+
+    document.addEventListener('DOMContentLoaded', startObserving, { once: true });
+}
+
 
 // 初始化函数
 function initialize() {
+    setupLoginClock();
 	applyFigmaSquirclesFromConfig();
+    setupSmoothScrollContainers();
     setupAppWindowAnimations();
     setupTaskbarItemAnimations();
 }
@@ -1086,6 +1698,8 @@ document.addEventListener("DOMContentLoaded", initialize);
 
 applyFigmaSquirclesFromConfig();
 if (document.readyState !== 'loading') {
+    setupLoginClock();
+    setupSmoothScrollContainers();
     setupAppWindowAnimations();
     setupTaskbarItemAnimations();
 }

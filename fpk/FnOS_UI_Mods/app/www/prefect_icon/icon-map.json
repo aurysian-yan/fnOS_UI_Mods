@@ -8,7 +8,16 @@
     "迅雷": "xunlei",
     "花生壳": "oray-hsk",
     "1Panel": "one-panel",
-    "emby": "emby"
+    "emby": "emby",
+    "kodi": "kodi",
+    "iCloud-Photos": "icloud",
+    "AList网盘": "alist",
+    "IT Tools": "it-tools",
+    "qBittorrent": "qbittorrent",
+    "夸克网盘自动转存": "quarkpan",
+    "Transmission": "transmission",
+    "Syncthing": "syncthing",
+    "PanIndex": "panindex"
   },
   "serviceIconMap": {
     "docker-home-assistantan": "home-assistant"

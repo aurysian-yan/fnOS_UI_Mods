@@ -170,6 +170,8 @@
   let currentLaunchpadAppItems = [];
   let launchpadIconObserver = null;
   let launchpadIconRefreshRafId = 0;
+  let appCenterMetaObserver = null;
+  let appCenterMetaRefreshRafId = 0;
   let lockscreenStyleObserver = null;
   let lockscreenStyleRafId = 0;
   let lockscreenStylePollTimer = 0;
@@ -186,6 +188,15 @@
   const LAUNCHPAD_STYLES = {
     classic: 'classic_launchpad_mod.css',
     spotlight: 'spotlight_launchpad_mod.css'
+  };
+
+  const APP_CENTER_META_TYPE_MAP = {
+    开发者: 'developer',
+    发布者: 'publisher',
+    下载数: 'downloads',
+    大小: 'size',
+    安装位置: 'install-location',
+    当前版本: 'version'
   };
 
   function normalizeTitlebarStyle(style) {
@@ -759,6 +770,225 @@
       iconSrc: item.iconSrc
     }));
     window.__fnosLaunchpadAppIconTitles = currentLaunchpadAppItems.map((item) => item.title);
+  }
+
+  function normalizeAppCenterMetaLabel(value) {
+    const normalized = normalizeText(value, 40).replace(/\s+/g, '');
+    return APP_CENTER_META_TYPE_MAP[normalized] || '';
+  }
+
+  function formatAppCenterDownloadValue(value) {
+    const normalized = normalizeText(value, 80);
+    if (!/^\d+$/.test(normalized)) return normalized;
+    return normalized.replace(/\B(?=(\d{4})+(?!\d))/g, ',');
+  }
+
+  function parseAppCenterSizeValue(value) {
+    const normalized = normalizeText(value, 80);
+    const matched = normalized.match(/^(.+?)(?:\s+)([A-Za-z]+)$/);
+    if (!matched) {
+      return {
+        main: normalized,
+        sub: ''
+      };
+    }
+    return {
+      main: normalizeText(matched[1], 40),
+      sub: normalizeText(matched[2], 20)
+    };
+  }
+
+  function getAppCenterMetaItems(rowEl) {
+    return Array.from(rowEl.children).filter((child) => child instanceof HTMLElement);
+  }
+
+  function isAppCenterMetaRow(rowEl) {
+    if (!(rowEl instanceof HTMLElement)) return false;
+    const items = getAppCenterMetaItems(rowEl);
+    if (items.length !== 5 && items.length !== 6) return false;
+
+    const types = items.map((itemEl) => {
+      const labelEl = Array.from(itemEl.children).find(
+        (child) => child instanceof HTMLParagraphElement
+      );
+      return normalizeAppCenterMetaLabel(labelEl?.textContent || '');
+    });
+
+    if (types.some((type) => !type)) return false;
+
+    const uniqueTypes = new Set(types);
+    if (uniqueTypes.size !== types.length) return false;
+
+    if (items.length === 6) {
+      return uniqueTypes.has('install-location');
+    }
+
+    return !uniqueTypes.has('install-location');
+  }
+
+  function removeAppCenterMetaSubValue(itemEl, valueEl) {
+    Array.from(itemEl.children).forEach((child) => {
+      if (!(child instanceof HTMLElement) || child === valueEl) return;
+      if (!child.classList.contains('fnos-app-meta-value-sub')) return;
+      child.remove();
+    });
+  }
+
+  function setAppCenterMetaStackedValue(itemEl, valueEl, mainText, subText) {
+    const nextMain = normalizeText(mainText, 80);
+    const nextSub = normalizeText(subText, 40);
+    const nextSignature = `${nextMain}||${nextSub}`;
+    if (valueEl.dataset.fnosAppMetaRendered === nextSignature) return;
+
+    valueEl.textContent = nextMain;
+    valueEl.dataset.fnosAppMetaRendered = nextSignature;
+
+    let subEl = Array.from(itemEl.children).find(
+      (child) =>
+        child instanceof HTMLElement &&
+        child.classList.contains('fnos-app-meta-value-sub')
+    );
+
+    if (nextSub) {
+      if (!(subEl instanceof HTMLElement)) {
+        subEl = document.createElement('span');
+        subEl.className = 'fnos-app-meta-value-sub';
+        itemEl.appendChild(subEl);
+      }
+      subEl.textContent = nextSub;
+    } else if (subEl instanceof HTMLElement) {
+      subEl.remove();
+    }
+  }
+
+  function setAppCenterMetaPlainValue(itemEl, valueEl, rawValue) {
+    const normalized = normalizeText(rawValue, 100);
+    if (valueEl.dataset.fnosAppMetaRendered === normalized) return;
+    removeAppCenterMetaSubValue(itemEl, valueEl);
+    valueEl.textContent = normalized;
+    valueEl.dataset.fnosAppMetaRendered = normalized;
+  }
+
+  function enhanceAppCenterMetaItem(itemEl, type) {
+    if (!(itemEl instanceof HTMLElement) || !type) return;
+
+    const paragraphs = Array.from(itemEl.children).filter(
+      (child) => child instanceof HTMLParagraphElement
+    );
+    if (paragraphs.length < 2) return;
+
+    const labelEl = paragraphs[0];
+    const valueEl = paragraphs[1];
+    const rawValue =
+      itemEl.dataset.fnosAppMetaRaw || normalizeText(valueEl.textContent, 100);
+
+    itemEl.dataset.fnosAppMetaRaw = rawValue;
+    itemEl.classList.add('fnos-app-meta-item', `fnos-app-meta-item--${type}`);
+    labelEl.classList.add('fnos-app-meta-label');
+    valueEl.classList.add('fnos-app-meta-value');
+
+    let iconEl = Array.from(itemEl.children).find(
+      (child) =>
+        child instanceof HTMLElement &&
+        child.classList.contains('fnos-app-meta-icon')
+    );
+
+    const iconTypes = new Set(['developer', 'publisher', 'install-location', 'version']);
+    if (iconTypes.has(type)) {
+      if (!(iconEl instanceof HTMLElement)) {
+        iconEl = document.createElement('span');
+        iconEl.setAttribute('aria-hidden', 'true');
+        itemEl.insertBefore(iconEl, valueEl);
+      }
+      iconEl.className = `fnos-app-meta-icon fnos-app-meta-icon--${type}`;
+      valueEl.classList.remove('fnos-app-meta-value-main');
+      setAppCenterMetaPlainValue(itemEl, valueEl, rawValue);
+      return;
+    }
+
+    if (iconEl instanceof HTMLElement) {
+      iconEl.remove();
+    }
+
+    valueEl.classList.add('fnos-app-meta-value-main');
+    if (type === 'downloads') {
+      setAppCenterMetaStackedValue(
+        itemEl,
+        valueEl,
+        formatAppCenterDownloadValue(rawValue),
+        '次'
+      );
+      return;
+    }
+
+    if (type === 'size') {
+      const parsed = parseAppCenterSizeValue(rawValue);
+      setAppCenterMetaStackedValue(itemEl, valueEl, parsed.main, parsed.sub);
+      return;
+    }
+
+    valueEl.classList.remove('fnos-app-meta-value-main');
+    setAppCenterMetaPlainValue(itemEl, valueEl, rawValue);
+  }
+
+  function refreshAppCenterMetaLayout() {
+    appCenterMetaRefreshRafId = 0;
+
+    document.querySelectorAll('.trim-ui__app-layout--window').forEach((windowEl) => {
+      if (!(windowEl instanceof HTMLElement)) return;
+
+      const appCenterIcon = windowEl.querySelector(
+        '.trim-ui__app-layout--header-title img[alt="应用中心"]'
+      );
+      if (!(appCenterIcon instanceof HTMLImageElement)) return;
+
+      windowEl.querySelectorAll('div').forEach((rowEl) => {
+        if (!(rowEl instanceof HTMLElement) || !isAppCenterMetaRow(rowEl)) return;
+        rowEl.classList.add('fnos-app-meta-panel');
+        rowEl.dataset.fnosAppMetaCount = String(getAppCenterMetaItems(rowEl).length);
+
+        getAppCenterMetaItems(rowEl).forEach((itemEl) => {
+          const labelEl = Array.from(itemEl.children).find(
+            (child) => child instanceof HTMLParagraphElement
+          );
+          const type = normalizeAppCenterMetaLabel(labelEl?.textContent || '');
+          enhanceAppCenterMetaItem(itemEl, type);
+        });
+      });
+    });
+  }
+
+  function scheduleAppCenterMetaRefresh() {
+    if (appCenterMetaRefreshRafId) return;
+    appCenterMetaRefreshRafId = window.requestAnimationFrame(refreshAppCenterMetaLayout);
+  }
+
+  function startAppCenterMetaObserver() {
+    if (!(document.body instanceof HTMLElement)) {
+      document.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          startAppCenterMetaObserver();
+          scheduleAppCenterMetaRefresh();
+        },
+        { once: true }
+      );
+      return;
+    }
+
+    if (appCenterMetaObserver) return;
+
+    appCenterMetaObserver = new MutationObserver(() => {
+      scheduleAppCenterMetaRefresh();
+    });
+
+    appCenterMetaObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
   }
 
   function clamp255(value) {
@@ -2054,6 +2284,8 @@
     triggerReason = 'unknown'
   ) {
     isInjectionActive = true;
+    startAppCenterMetaObserver();
+    scheduleAppCenterMetaRefresh();
     startLockscreenStyleSync();
     currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
     currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);
