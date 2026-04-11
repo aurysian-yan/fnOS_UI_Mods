@@ -1,7 +1,7 @@
 {
   "name": "fnos-ui-mods",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "FnOS UI Mods build entry",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
