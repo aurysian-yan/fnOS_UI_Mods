@@ -23,6 +23,22 @@
     'fnos-window-animation-blur-disabled';
   const LAUNCHPAD_ICON_ORIGINAL_SRC_ATTR = 'data-fnos-original-src';
   const LAUNCHPAD_ICON_ORIGINAL_DATA_SRC_ATTR = 'data-fnos-original-data-src';
+  const APP_CENTER_DETAIL_OVERLAY_CLASS_TOKENS = [
+    'absolute',
+    'inset-0',
+    'flex',
+    'flex-col',
+    'z-10'
+  ];
+  const APP_CENTER_ROUTE_WINDOW_ACTIVE_CLASS = 'fnos-app-center-route-detail-open';
+  const APP_CENTER_ROUTE_HOME_CLASS = 'fnos-app-center-route-home';
+  const APP_CENTER_ROUTE_DETAIL_CLASS = 'fnos-app-center-route-detail';
+  const APP_CENTER_ROUTE_ACTIVE_CLASS = 'fnos-app-center-route-active';
+  const APP_CENTER_ROUTE_LEAVING_CLASS = 'fnos-app-center-route-leaving';
+  const APP_CENTER_ROUTE_PREPARED_ATTR = 'data-fnos-route-prepared';
+  const APP_CENTER_ROUTE_BACK_BYPASS_ATTR = 'data-fnos-route-bypass';
+  const APP_CENTER_ROUTE_PENDING_ATTR = 'data-fnos-route-pending';
+  const APP_CENTER_GLOBAL_BACK_CLASS = 'fnos-app-center-global-back';
 
   const THEME_DEFAULT_BRAND = '#0066ff';
   const BRAND_LIGHTNESS_MIN = 0.3;
@@ -172,13 +188,18 @@
   let launchpadIconRefreshRafId = 0;
   let appCenterMetaObserver = null;
   let appCenterMetaRefreshRafId = 0;
+  let appCenterRouteRefreshRafId = 0;
   let lockscreenStyleObserver = null;
   let lockscreenStyleRafId = 0;
   let lockscreenStylePollTimer = 0;
   let hasLockscreenLifecycleHooks = false;
+  let hasAppCenterRouteClickHook = false;
   let lastAppliedCustomJs = '';
   let isInjectionActive = false;
   let extensionContextInvalidated = false;
+  const appCenterRoutePendingTimers = new WeakMap();
+  const appCenterRouteHomeInlineSnapshot = new WeakMap();
+  const appCenterRouteHomeRestoreTimers = new WeakMap();
 
   const TITLEBAR_STYLES = {
     windows: 'windows_titlebar_mod.css',
@@ -958,9 +979,413 @@
     });
   }
 
+  function isAppCenterWindow(windowEl) {
+    if (!(windowEl instanceof HTMLElement)) return false;
+    return Boolean(
+      windowEl.querySelector('.trim-ui__app-layout--header-title img[alt="应用中心"]')
+    );
+  }
+
+  function isAppCenterDetailOverlay(overlayEl) {
+    if (!(overlayEl instanceof HTMLElement)) return false;
+    if (!hasAllClasses(overlayEl, APP_CENTER_DETAIL_OVERLAY_CLASS_TOKENS)) return false;
+    if (!overlayEl.classList.contains('bg-[var(--semi-color-app-container)]')) return false;
+    return Boolean(overlayEl.querySelector('button.semi-button-with-icon-only'));
+  }
+
+  function getAppCenterDetailOverlay(windowEl) {
+    if (!(windowEl instanceof HTMLElement)) return null;
+
+    return Array.from(windowEl.querySelectorAll('div')).find((candidate) =>
+      isAppCenterDetailOverlay(candidate)
+    );
+  }
+
+  function getAppCenterWindowHeaderTitle(windowEl) {
+    if (!(windowEl instanceof HTMLElement)) return null;
+    const titleEl = windowEl.querySelector('.trim-ui__app-layout--header-title');
+    return titleEl instanceof HTMLElement ? titleEl : null;
+  }
+
+  function getAppCenterDetailBackButton(windowEl) {
+    const detailLayer = getAppCenterDetailOverlay(windowEl);
+    if (!(detailLayer instanceof HTMLElement)) return null;
+
+    return (
+      Array.from(detailLayer.querySelectorAll('button')).find((button) =>
+        isAppCenterRouteBackButton(button, detailLayer)
+      ) || null
+    );
+  }
+
+  function createAppCenterGlobalBackButton(windowEl) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = APP_CENTER_GLOBAL_BACK_CLASS;
+    button.setAttribute('aria-label', '返回');
+    button.innerHTML =
+      '<span class="fnos-app-center-global-back__glyph" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M28.5 16C28.5 16.3978 28.342 16.7794 28.0607 17.0607C27.7794 17.342 27.3978 17.5 27 17.5H8.62502L15.065 23.9388C15.3468 24.2206 15.5051 24.6027 15.5051 25.0013C15.5051 25.3998 15.3468 25.782 15.065 26.0638C14.7832 26.3456 14.401 26.5039 14.0025 26.5039C13.604 26.5039 13.2218 26.3456 12.94 26.0638L3.94002 17.0638C3.80018 16.9244 3.68923 16.7588 3.61352 16.5765C3.53781 16.3942 3.49884 16.1987 3.49884 16.0013C3.49884 15.8038 3.53781 15.6084 3.61352 15.426C3.68923 15.2437 3.80018 15.0781 3.94002 14.9388L12.94 5.93876C13.0796 5.79923 13.2452 5.68855 13.4275 5.61304C13.6098 5.53752 13.8052 5.49866 14.0025 5.49866C14.1998 5.49866 14.3952 5.53752 14.5775 5.61304C14.7598 5.68855 14.9255 5.79923 15.065 5.93876C15.2046 6.07829 15.3152 6.24393 15.3907 6.42624C15.4663 6.60854 15.5051 6.80393 15.5051 7.00126C15.5051 7.19858 15.4663 7.39398 15.3907 7.57628C15.3152 7.75858 15.2046 7.92423 15.065 8.06376L8.62502 14.5H27C27.3978 14.5 27.7794 14.658 28.0607 14.9393C28.342 15.2207 28.5 15.6022 28.5 16Z" fill="currentColor"/></svg></span>';
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const backButton = getAppCenterDetailBackButton(windowEl);
+      if (!(backButton instanceof HTMLButtonElement)) return;
+      backButton.click();
+    });
+
+    return button;
+  }
+
+  function syncAppCenterGlobalBackButton(windowEl) {
+    if (!(windowEl instanceof HTMLElement)) return;
+    if (!isAppCenterWindow(windowEl)) return;
+
+    const titleEl = getAppCenterWindowHeaderTitle(windowEl);
+    if (!(titleEl instanceof HTMLElement)) return;
+
+    let button = titleEl.querySelector(`.${APP_CENTER_GLOBAL_BACK_CLASS}`);
+    if (!(button instanceof HTMLButtonElement)) {
+      button = createAppCenterGlobalBackButton(windowEl);
+      titleEl.prepend(button);
+    }
+
+    const hasDetail = Boolean(getAppCenterDetailBackButton(windowEl));
+    button.disabled = !hasDetail;
+    button.tabIndex = hasDetail ? 0 : -1;
+    button.setAttribute('aria-hidden', 'false');
+  }
+
+  function getAppCenterRouteHomeLayer(detailLayer) {
+    if (!(detailLayer instanceof HTMLElement)) return null;
+    const parent = detailLayer.parentElement;
+    if (!(parent instanceof HTMLElement)) return null;
+
+    return Array.from(parent.children).find((child) => {
+      if (!(child instanceof HTMLElement) || child === detailLayer) return false;
+      return (
+        child.classList.contains('box-border') &&
+        child.classList.contains('flex') &&
+        child.classList.contains('h-full') &&
+        child.classList.contains('flex-col') &&
+        child.classList.contains('py-5') &&
+        child.classList.contains('relative')
+      );
+    });
+  }
+
+  function getAppCenterPrimaryContentLayer(windowEl) {
+    if (!(windowEl instanceof HTMLElement)) return null;
+
+    const primaryContainer = Array.from(windowEl.querySelectorAll('div')).find((candidate) => {
+      if (!(candidate instanceof HTMLElement)) return false;
+      if (!candidate.classList.contains('ms-container')) return false;
+      if (!candidate.classList.contains('size-full')) return false;
+
+      const parent = candidate.parentElement;
+      if (!(parent instanceof HTMLElement)) return false;
+
+      return (
+        parent.classList.contains('relative') &&
+        parent.classList.contains('box-border') &&
+        parent.classList.contains('size-full') &&
+        parent.classList.contains('overflow-hidden') &&
+        parent.classList.contains('bg-[var(--semi-color-app-container)]')
+      );
+    });
+
+    if (!(primaryContainer instanceof HTMLElement)) return null;
+
+    return Array.from(primaryContainer.children).find((child) => {
+      if (!(child instanceof HTMLElement)) return false;
+      return (
+        child.classList.contains('box-border') &&
+        child.classList.contains('flex') &&
+        child.classList.contains('h-full') &&
+        child.classList.contains('flex-col') &&
+        child.classList.contains('py-5') &&
+        child.classList.contains('relative')
+      );
+    });
+  }
+
+  function captureAppCenterRouteHomeInlineStyle(layerEl) {
+    if (!(layerEl instanceof HTMLElement)) return;
+    if (appCenterRouteHomeInlineSnapshot.has(layerEl)) return;
+
+    appCenterRouteHomeInlineSnapshot.set(layerEl, {
+      transform: layerEl.style.transform,
+      opacity: layerEl.style.opacity,
+      transition: layerEl.style.transition,
+      willChange: layerEl.style.willChange,
+      transformOrigin: layerEl.style.transformOrigin
+    });
+  }
+
+  function clearAppCenterRouteHomeRestoreTimer(layerEl) {
+    if (!(layerEl instanceof HTMLElement)) return;
+
+    const timer = appCenterRouteHomeRestoreTimers.get(layerEl);
+    if (timer) {
+      window.clearTimeout(timer);
+      appCenterRouteHomeRestoreTimers.delete(layerEl);
+    }
+  }
+
+  function restoreAppCenterRouteHomeInlineStyle(layerEl, snapshot, clearSnapshot = true) {
+    if (!(layerEl instanceof HTMLElement) || !snapshot) return;
+
+    layerEl.style.transform = snapshot.transform;
+    layerEl.style.opacity = snapshot.opacity;
+    layerEl.style.transition = snapshot.transition;
+    layerEl.style.willChange = snapshot.willChange;
+    layerEl.style.transformOrigin = snapshot.transformOrigin;
+
+    if (clearSnapshot) {
+      appCenterRouteHomeInlineSnapshot.delete(layerEl);
+    }
+  }
+
+  function applyAppCenterRouteHomeState(layerEl, active) {
+    if (!(layerEl instanceof HTMLElement)) return;
+
+    captureAppCenterRouteHomeInlineStyle(layerEl);
+    clearAppCenterRouteHomeRestoreTimer(layerEl);
+    layerEl.style.transformOrigin = 'center center';
+    layerEl.style.transition = active
+      ? 'transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 440ms ease'
+      : 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease';
+    layerEl.style.willChange = 'transform, opacity';
+
+    if (active) {
+      layerEl.style.transform = 'translateX(-36px) scale(0.968)';
+      layerEl.style.opacity = '0';
+      return;
+    }
+
+    const snapshot = appCenterRouteHomeInlineSnapshot.get(layerEl);
+    if (!snapshot) {
+      layerEl.style.transform = '';
+      layerEl.style.opacity = '';
+      layerEl.style.transition = '';
+      layerEl.style.willChange = '';
+      layerEl.style.transformOrigin = '';
+      return;
+    }
+
+    layerEl.style.transform = snapshot.transform;
+    layerEl.style.opacity = snapshot.opacity;
+
+    const timer = window.setTimeout(() => {
+      restoreAppCenterRouteHomeInlineStyle(layerEl, snapshot);
+      appCenterRouteHomeRestoreTimers.delete(layerEl);
+    }, 320);
+
+    appCenterRouteHomeRestoreTimers.set(layerEl, timer);
+  }
+
+  function syncAppCenterRouteHomeLayer(windowEl, nextHomeLayer) {
+    if (!(windowEl instanceof HTMLElement)) return;
+
+    const managedLayers = new Set();
+    windowEl.querySelectorAll(`.${APP_CENTER_ROUTE_HOME_CLASS}`).forEach((el) => {
+      if (el instanceof HTMLElement) {
+        managedLayers.add(el);
+      }
+    });
+
+    if (nextHomeLayer instanceof HTMLElement) {
+      managedLayers.add(nextHomeLayer);
+    }
+
+    managedLayers.forEach((layerEl) => {
+      const isActiveLayer = layerEl === nextHomeLayer;
+      applyAppCenterRouteHomeState(layerEl, isActiveLayer);
+      layerEl.classList.toggle(APP_CENTER_ROUTE_HOME_CLASS, isActiveLayer);
+    });
+  }
+
+  function clearAppCenterRouteState(windowEl) {
+    if (!(windowEl instanceof HTMLElement)) return;
+
+    const pendingTimer = appCenterRoutePendingTimers.get(windowEl);
+    if (pendingTimer) {
+      window.clearTimeout(pendingTimer);
+      appCenterRoutePendingTimers.delete(windowEl);
+    }
+
+    syncAppCenterRouteHomeLayer(windowEl, null);
+
+    windowEl.classList.remove(APP_CENTER_ROUTE_WINDOW_ACTIVE_CLASS);
+    windowEl.removeAttribute(APP_CENTER_ROUTE_PENDING_ATTR);
+    windowEl.querySelectorAll(`.${APP_CENTER_ROUTE_DETAIL_CLASS}`).forEach((el) => {
+      el.classList.remove(
+        APP_CENTER_ROUTE_DETAIL_CLASS,
+        APP_CENTER_ROUTE_ACTIVE_CLASS,
+        APP_CENTER_ROUTE_LEAVING_CLASS
+      );
+      el.removeAttribute(APP_CENTER_ROUTE_PREPARED_ATTR);
+    });
+  }
+
+  function refreshAppCenterRouteState() {
+    appCenterRouteRefreshRafId = 0;
+
+    document.querySelectorAll('.trim-ui__app-layout--window').forEach((windowEl) => {
+      if (!isAppCenterWindow(windowEl)) return;
+
+      syncAppCenterGlobalBackButton(windowEl);
+
+      const detailLayer = getAppCenterDetailOverlay(windowEl);
+      if (!(detailLayer instanceof HTMLElement)) {
+        if (windowEl.hasAttribute(APP_CENTER_ROUTE_PENDING_ATTR)) return;
+        clearAppCenterRouteState(windowEl);
+        return;
+      }
+
+      const pendingTimer = appCenterRoutePendingTimers.get(windowEl);
+      if (pendingTimer) {
+        window.clearTimeout(pendingTimer);
+        appCenterRoutePendingTimers.delete(windowEl);
+      }
+      windowEl.removeAttribute(APP_CENTER_ROUTE_PENDING_ATTR);
+
+      const homeLayer =
+        getAppCenterRouteHomeLayer(detailLayer) || getAppCenterPrimaryContentLayer(windowEl);
+
+      windowEl.classList.add(APP_CENTER_ROUTE_WINDOW_ACTIVE_CLASS);
+      syncAppCenterRouteHomeLayer(windowEl, homeLayer);
+
+      detailLayer.classList.add(APP_CENTER_ROUTE_DETAIL_CLASS);
+      if (!detailLayer.hasAttribute(APP_CENTER_ROUTE_PREPARED_ATTR)) {
+        detailLayer.setAttribute(APP_CENTER_ROUTE_PREPARED_ATTR, '1');
+        window.requestAnimationFrame(() => {
+          if (!detailLayer.isConnected) return;
+          detailLayer.classList.add(APP_CENTER_ROUTE_ACTIVE_CLASS);
+        });
+      }
+
+      windowEl.querySelectorAll(`.${APP_CENTER_ROUTE_DETAIL_CLASS}`).forEach((el) => {
+        if (el !== detailLayer) {
+          el.classList.remove(
+            APP_CENTER_ROUTE_DETAIL_CLASS,
+            APP_CENTER_ROUTE_ACTIVE_CLASS,
+            APP_CENTER_ROUTE_LEAVING_CLASS
+          );
+          el.removeAttribute(APP_CENTER_ROUTE_PREPARED_ATTR);
+        }
+      });
+    });
+  }
+
   function scheduleAppCenterMetaRefresh() {
     if (appCenterMetaRefreshRafId) return;
     appCenterMetaRefreshRafId = window.requestAnimationFrame(refreshAppCenterMetaLayout);
+  }
+
+  function scheduleAppCenterRouteRefresh() {
+    if (appCenterRouteRefreshRafId) return;
+    appCenterRouteRefreshRafId = window.requestAnimationFrame(refreshAppCenterRouteState);
+  }
+
+  function isAppCenterRouteBackButton(button, detailLayer) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+    if (!(detailLayer instanceof HTMLElement)) return false;
+    if (!button.classList.contains('semi-button-with-icon-only')) return false;
+
+    const topBar = detailLayer.firstElementChild;
+    return topBar instanceof HTMLElement && topBar.contains(button);
+  }
+
+  function isAppCenterRouteCardClickTarget(target) {
+    if (!(target instanceof Element)) return false;
+
+    const interactive = target.closest('button, input, textarea, select, a, [role="tab"]');
+    if (interactive) return false;
+
+    const card = target.closest(
+      '.relative.flex.cursor-pointer.flex-col.items-start.gap-y-3.rounded-lg.border.border-solid.border-card-border.bg-card-DefaultBg.p-3'
+    );
+    return card instanceof HTMLElement;
+  }
+
+  function primeAppCenterRouteOpen(target) {
+    if (!(target instanceof Element)) return;
+
+    const windowEl = target.closest('.trim-ui__app-layout--window');
+    if (!isAppCenterWindow(windowEl)) return;
+    if (getAppCenterDetailOverlay(windowEl)) return;
+    if (!isAppCenterRouteCardClickTarget(target)) return;
+
+    const homeLayer = getAppCenterPrimaryContentLayer(windowEl);
+    if (!(homeLayer instanceof HTMLElement)) return;
+
+    const existingTimer = appCenterRoutePendingTimers.get(windowEl);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+    }
+
+    windowEl.classList.add(APP_CENTER_ROUTE_WINDOW_ACTIVE_CLASS);
+    windowEl.setAttribute(APP_CENTER_ROUTE_PENDING_ATTR, '1');
+    syncAppCenterRouteHomeLayer(windowEl, homeLayer);
+
+    const timer = window.setTimeout(() => {
+      if (!windowEl.isConnected) return;
+      if (getAppCenterDetailOverlay(windowEl)) return;
+      clearAppCenterRouteState(windowEl);
+    }, 700);
+
+    appCenterRoutePendingTimers.set(windowEl, timer);
+  }
+
+  function handleAppCenterRouteClick(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    primeAppCenterRouteOpen(target);
+
+    const button = target.closest('button');
+    if (!(button instanceof HTMLButtonElement)) return;
+
+    if (button.hasAttribute(APP_CENTER_ROUTE_BACK_BYPASS_ATTR)) {
+      button.removeAttribute(APP_CENTER_ROUTE_BACK_BYPASS_ATTR);
+      return;
+    }
+
+    const detailLayer = button.closest(`.${APP_CENTER_ROUTE_DETAIL_CLASS}`);
+    if (!(detailLayer instanceof HTMLElement)) return;
+    if (!isAppCenterRouteBackButton(button, detailLayer)) return;
+    if (detailLayer.classList.contains(APP_CENTER_ROUTE_LEAVING_CLASS)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    detailLayer.classList.remove(APP_CENTER_ROUTE_ACTIVE_CLASS);
+    detailLayer.classList.add(APP_CENTER_ROUTE_LEAVING_CLASS);
+
+    const windowEl = detailLayer.closest('.trim-ui__app-layout--window');
+    if (windowEl instanceof HTMLElement) {
+      syncAppCenterRouteHomeLayer(windowEl, null);
+      windowEl.classList.remove(APP_CENTER_ROUTE_WINDOW_ACTIVE_CLASS);
+    }
+
+    button.setAttribute(APP_CENTER_ROUTE_BACK_BYPASS_ATTR, '1');
+    window.setTimeout(() => {
+      if (!button.isConnected) return;
+      button.click();
+    }, 240);
+  }
+
+  function startAppCenterRouteTransitionSupport() {
+    if (hasAppCenterRouteClickHook) return;
+    document.addEventListener('click', handleAppCenterRouteClick, true);
+    hasAppCenterRouteClickHook = true;
   }
 
   function startAppCenterMetaObserver() {
@@ -970,6 +1395,7 @@
         () => {
           startAppCenterMetaObserver();
           scheduleAppCenterMetaRefresh();
+          scheduleAppCenterRouteRefresh();
         },
         { once: true }
       );
@@ -980,6 +1406,7 @@
 
     appCenterMetaObserver = new MutationObserver(() => {
       scheduleAppCenterMetaRefresh();
+      scheduleAppCenterRouteRefresh();
     });
 
     appCenterMetaObserver.observe(document.body, {
@@ -2285,7 +2712,9 @@
   ) {
     isInjectionActive = true;
     startAppCenterMetaObserver();
+    startAppCenterRouteTransitionSupport();
     scheduleAppCenterMetaRefresh();
+    scheduleAppCenterRouteRefresh();
     startLockscreenStyleSync();
     currentTitlebarStyle = normalizeTitlebarStyle(titlebarStyle);
     currentLaunchpadStyle = normalizeLaunchpadStyle(launchpadStyle);

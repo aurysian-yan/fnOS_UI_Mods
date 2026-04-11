@@ -9,6 +9,10 @@
     padding-right: 32px;
 }
 
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .trim-ui__app-layout--header-title {
+    padding-left: 58px !important;
+}
+
 .trim-ui__app-layout--header-title>div>img {
     height: 22px;
     width: 22px;

@@ -336,6 +336,154 @@
     -webkit-mask-image: none;
 }
 
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .relative.box-border.size-full.overflow-hidden.bg-\[var\(--semi-color-app-container\)\] {
+    isolation: isolate;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .trim-ui__app-layout--header-title {
+    position: relative;
+    padding-left: 58px !important;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-global-back {
+    position: absolute;
+    top: calc(50% - 6px);
+    left: 0;
+    display: inline-flex;
+    width: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    color: var(--semi-color-text-0);
+    transform: translateY(-50%) scale(0.92);
+    transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease;
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: pointer;
+    z-index: 2;
+    height: calc(100% - 12px) !important;
+    padding: 0px 9px !important;
+    border-radius: 24px !important;
+    corner-shape: superellipse(2);
+    transition: all 0.5s cubic-bezier(0, 1.03, 0.68, 1.18) !important;
+    background: transparent;
+    margin: 6px 0 6px 6px !important;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]).fnos-app-center-route-detail-open .fnos-app-center-global-back {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1);
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-global-back:hover:not(:disabled) {
+    background:
+        color-mix(in srgb, var(--semi-color-fill-1) 88%, transparent);
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-global-back:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    background:
+        color-mix(in srgb, var(--semi-color-fill-0) 46%, transparent);
+    color:
+        color-mix(in srgb, var(--semi-color-text-0) 62%, transparent);
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-global-back__glyph {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-1px);
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-global-back__glyph svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-home {
+    position: relative;
+    z-index: 1;
+    transform-origin: center center;
+    transition:
+        transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 440ms ease;
+    will-change: transform, opacity;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]).fnos-app-center-route-detail-open .fnos-app-center-route-home {
+    transform: translateX(-36px) scale(0.968);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .absolute.inset-0.flex.flex-col.z-10.bg-\[var\(--semi-color-app-container\)\]:has(button.semi-button-with-icon-only):not(.fnos-app-center-route-active):not(.fnos-app-center-route-leaving),
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-detail {
+    z-index: 3 !important;
+    opacity: 0;
+    background-color: transparent !important;
+    transform: translateX(64px) scale(0.955);
+    transition:
+        transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 440ms ease,
+        background-color 0s linear 320ms;
+    will-change: transform, opacity;
+    pointer-events: none;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-detail.fnos-app-center-route-active {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-detail.fnos-app-center-route-leaving {
+    opacity: 0;
+    background-color: transparent !important;
+    transform: translateX(34px) scale(0.972);
+    transition:
+        transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
+        opacity 220ms ease,
+        background-color 0s linear 0s;
+    pointer-events: none;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-detail > .flex.h-\[36px\].items-center.gap-2.px-4.pb-1.pt-2 {
+    display: none;
+}
+
+.trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-detail > .flex-1.overflow-hidden.px-5>.ms-container {
+    padding-top: 20px;
+    box-sizing: border-box;
+}
+
+.semi-input-wrapper.semi-input-wrapper__with-prefix.semi-input-wrapper-clearable.semi-input-wrapper-default {
+    height: 32px;
+    border-radius: 999px;
+    background:
+        color-mix(in srgb, var(--semi-color-input-DefaultBg) 50%, transparent);
+    margin-bottom: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-global-back {
+        transition: none !important;
+    }
+
+    .trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-home,
+    .trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .absolute.inset-0.flex.flex-col.z-10.bg-\[var\(--semi-color-app-container\)\]:has(button.semi-button-with-icon-only):not(.fnos-app-center-route-active):not(.fnos-app-center-route-leaving),
+    .trim-ui__app-layout--window:has(.trim-ui__app-layout--header-title img[alt="应用中心"]) .fnos-app-center-route-detail {
+        background-color: var(--semi-color-app-container) !important;
+        transition: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+    }
+}
+
 .fnos-app-meta-icon {
     background-color:
         color-mix(in srgb, var(--semi-color-text-0) 78%, transparent);
