@@ -5,6 +5,22 @@
   "description": "FnOS UI Mods build entry",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "build:popup": "node scripts/build-popup.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^3.34.0",
+    "@emotion/react": "^11.14.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tanstack/history": "^1.161.6",
+    "@tanstack/react-router": "^1.168.23",
+    "liquid-glass-react": "^1.1.1",
+    "motion": "^12.38.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-progressive-blur": "^1.0.6"
   }
 }
